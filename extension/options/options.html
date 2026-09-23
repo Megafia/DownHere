@@ -25,7 +25,7 @@
     </header>
 
     <p class="banner" id="paused-banner" hidden>
-      DownHere is paused. All downloads go to Chrome’s usual download folder until you switch it back on.
+      DownHere is paused. It doesn’t change where any download is saved until you switch it back on.
     </p>
 
     <main>
@@ -86,15 +86,10 @@
           </label>
           <p class="hint">
             Example: on reddit.com you save an image that is stored on imgur.com. When only one of the two sites
-            has a rule, that rule is used.
+            has a rule, that rule is used. Some websites hide the page address from downloads; then only the file’s
+            address is checked.
           </p>
         </fieldset>
-        <div class="setting">
-          <label class="check">
-            <input type="checkbox" id="ignore-extensions">
-            Leave downloads started by other extensions where those extensions save them
-          </label>
-        </div>
       </section>
 
       <section class="card" aria-labelledby="test-title">
@@ -140,17 +135,24 @@
           </li>
           <li>
             A rule for example.com also covers www.example.com. Switch on “Include subdomains” to cover addresses
-            such as files.example.com too. When several rules fit, the most specific one wins.
+            such as files.example.com too. When several rules fit the same address, the most specific one wins.
           </li>
-          <li>DownHere only chooses the folder. Files keep the name Chrome gives them.</li>
+          <li>
+            DownHere only chooses the folder. Files keep the name Chrome gives them, except that a few names some
+            versions of Chrome don’t allow inside folders (such as CON.txt) stay in the Downloads folder.
+          </li>
           <li>If Chrome is set to ask where to save each file, the save dialog suggests the rule’s folder.</li>
           <li>
             Rules only apply in Incognito windows if you allow DownHere in Incognito (chrome://extensions ›
             DownHere › Details).
           </li>
           <li>
-            Only one extension can choose where a download is saved. If another extension does this too, Chrome
-            follows the one that was installed or updated most recently.
+            While DownHere is on and has a rule switched on, Chrome ignores the folder and file name that other
+            extensions ask for when they download something. Pause DownHere to let them choose again.
+          </li>
+          <li>
+            If you also use another extension that sorts or renames downloads, Chrome lets only one of them decide
+            while both are active: the one installed or updated most recently, even for downloads it doesn’t change.
           </li>
           <li>Your rules are stored only in this browser. DownHere doesn’t send any data anywhere.</li>
         </ul>

@@ -7,14 +7,12 @@ export const CONFLICT_ACTIONS = Object.freeze(['uniquify', 'overwrite', 'prompt'
 export const PREFER_SOURCES = Object.freeze(['page', 'file']);
 
 export const DEFAULT_SETTINGS = Object.freeze({
-  // Master switch. When false, every download goes where Chrome would put it.
+  // Master switch. When false, DownHere doesn't touch any download.
   enabled: true,
   // What Chrome should do when a routed file's name is already taken.
   conflictAction: 'uniquify',
   // Which address wins when the page and the file match different rules.
   preferSource: 'page',
-  // Leave downloads started by other extensions where they asked for them.
-  ignoreOtherExtensions: false,
 });
 
 // ---------------------------------------------------------------------------
@@ -28,11 +26,12 @@ const SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
 const WILDCARD_PATTERN = /^((?:[a-z][a-z0-9+.-]*:\/\/)?)\*?\./i;
 
 // Lowercases a host name and drops a trailing dot and a leading "www.", so
-// "WWW.Example.com." and "example.com" are treated as the same site.
+// "WWW.Example.com." and "example.com" are treated as the same site. "www." is
+// kept when only one label would remain ("www.com" isn't the same as "com").
 function canonicalHost(hostname) {
   let host = hostname.toLowerCase();
   if (host.endsWith('.')) host = host.slice(0, -1);
-  if (host.startsWith('www.') && host.length > 4) host = host.slice(4);
+  if (host.startsWith('www.') && host.indexOf('.', 4) !== -1) host = host.slice(4);
   return host;
 }
 
@@ -63,6 +62,19 @@ export function hostFromUrl(url) {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
   const host = canonicalHost(parsed.hostname);
   return isValidHost(host) ? host : '';
+}
+
+/**
+ * Turns an address typed by a person into a URL: "example.com/file.zip" and
+ * "localhost:3000/file.zip" get "https://", and "http:/example.com" is read as
+ * "http://example.com".
+ */
+export function toWebAddress(text) {
+  const value = typeof text === 'string' ? text.trim() : '';
+  if (value === '' || SCHEME_PATTERN.test(value) || /^(?:blob|data|file|filesystem):/i.test(value)) return value;
+  const typo = /^(https?):\/*/i.exec(value);
+  if (typo) return `${typo[1]}://${value.slice(typo[0].length)}`;
+  return `https://${value}`;
 }
 
 function parseHostname(text) {
@@ -97,6 +109,8 @@ export function normalizeDomain(input) {
   if (text === '') {
     return { ok: false, error: 'Enter a website domain, like example.com.' };
   }
+  // "http:/example.com" and "https:example.com" are typos, not "host:port".
+  text = text.replace(/^https?:\/?(?!\/)/i, '');
   // Chrome can't parse "*" in a host name, so strip the wildcard first.
   const wildcard = WILDCARD_PATTERN.exec(text);
   if (wildcard) text = wildcard[1] + text.slice(wildcard[0].length);
@@ -263,8 +277,8 @@ export function normalizeFolder(input) {
   if (/^(?:[a-z]:|[\\/]|~(?:[\\/]|$))/i.test(text)) {
     return {
       ok: false,
-      error: 'Enter a folder inside your Downloads folder, like Work/Invoices, not a full path. ' +
-        'Chrome only lets extensions save inside Downloads.',
+      error: 'Use a folder inside Downloads, like Work/Invoices, not a full path. ' +
+        'Chrome doesn’t let extensions save anywhere else.',
     };
   }
   const parts = text
@@ -300,19 +314,24 @@ export function buildTargetPath(folder, proposedFilename) {
 // ---------------------------------------------------------------------------
 
 /**
+ * True when DownHere has something to do: it is switched on and at least one
+ * rule is switched on.
+ */
+export function isRoutingActive(rules, settings) {
+  return settings.enabled && rules.some((rule) => rule.enabled);
+}
+
+/**
  * Decides where a download should go.
  *
  * @param {object} item The chrome.downloads.DownloadItem being named.
  * @returns {{action: 'route', filename: string, conflictAction: string, rule: object, source: string, host: string}
  *   | {action: 'skip', reason: string, rule?: object}}
  */
-export function resolveDownload(item, rules, settings, ownExtensionId = '') {
+export function resolveDownload(item, rules, settings) {
   if (!settings.enabled) return { action: 'skip', reason: 'disabled' };
   // Chrome ignores suggestions for files opened from the computer.
   if (/^file:/i.test(item.url ?? '')) return { action: 'skip', reason: 'local-file' };
-  if (item.byExtensionId && (item.byExtensionId === ownExtensionId || settings.ignoreOtherExtensions)) {
-    return { action: 'skip', reason: 'extension' };
-  }
   const match = findRuleForDownload(item, rules, settings.preferSource);
   if (!match) return { action: 'skip', reason: 'no-rule' };
   const filename = buildTargetPath(match.rule.folder, item.filename);
@@ -332,12 +351,10 @@ function newRuleId() {
 export function sanitizeSettings(raw) {
   const value = raw && typeof raw === 'object' ? raw : {};
   const pick = (key, isValid) => (isValid(value[key]) ? value[key] : DEFAULT_SETTINGS[key]);
-  const isBoolean = (entry) => typeof entry === 'boolean';
   return {
-    enabled: pick('enabled', isBoolean),
+    enabled: pick('enabled', (entry) => typeof entry === 'boolean'),
     conflictAction: pick('conflictAction', (entry) => CONFLICT_ACTIONS.includes(entry)),
     preferSource: pick('preferSource', (entry) => PREFER_SOURCES.includes(entry)),
-    ignoreOtherExtensions: pick('ignoreOtherExtensions', isBoolean),
   };
 }
 

@@ -56,6 +56,18 @@ export function showFolderError(input, hint, message) {
   input.setAttribute('aria-invalid', 'true');
 }
 
+/**
+ * The message shown after a rule is added or saved, e.g. describeSavedRule('Saved', rule, settings).
+ * It only promises a folder when the rule will actually be used.
+ */
+export function describeSavedRule(verb, rule, settings) {
+  if (!settings.enabled) {
+    return `${verb}. DownHere is paused, so the rule for ${rule.domain} isn’t used until you switch DownHere back on.`;
+  }
+  if (!rule.enabled) return `${verb}. The rule for ${rule.domain} is switched off.`;
+  return `${verb}. Downloads from ${rule.domain} will be saved in ${displayFolder(rule.folder)}.`;
+}
+
 /** Fills a <datalist> with the folders already used by rules. */
 export function fillFolderSuggestions(datalist, rules) {
   const folders = [...new Set(rules.map((rule) => rule.folder))].sort((a, b) => a.localeCompare(b));

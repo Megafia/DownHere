@@ -1,3 +1,9 @@
+/* If the content ever gets taller than Chrome's 600px popup limit, the
+   vertical scrollbar must not add a horizontal one. */
+html {
+  overflow-x: hidden;
+}
+
 html body {
   width: 340px;
   background: var(--surface);
@@ -91,4 +97,11 @@ html body {
 
 .message[data-tone="error"] {
   color: var(--danger);
+}
+
+/* Forced colors replace backgrounds, so outline the notice instead. */
+@media (forced-colors: active) {
+  .rule-off {
+    border: 1px solid CanvasText;
+  }
 }

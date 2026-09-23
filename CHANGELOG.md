@@ -11,8 +11,9 @@ First release.
   without subdomains. The most specific rule wins.
 - Toolbar popup to choose the folder for the current website.
 - Settings page to add, edit, switch off and delete rules (with undo).
-- Settings for file name conflicts, page-or-file priority and downloads started by other extensions, plus a switch to
-  pause DownHere.
+- Settings for file name conflicts and page-or-file priority, plus a switch to pause DownHere.
+- DownHere only listens to downloads while it is on and has a rule switched on, so it doesn’t get in the way of
+  other extensions the rest of the time.
 - Download checker that shows which folder an address would go to.
 - Backup and restore of rules and settings as a JSON file.
 - Folder names are checked against Chrome’s rules while you type.

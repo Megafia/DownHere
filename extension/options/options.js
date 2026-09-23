@@ -13,9 +13,17 @@ import {
   restoreRule,
   setRuleEnabled,
   sortRules,
+  toWebAddress,
 } from '../lib/rules.js';
 import { loadState, updateSettings, updateState, watchState } from '../lib/storage.js';
-import { fillFolderSuggestions, h, setFieldError, showFolderError, updateFolderHint } from '../lib/ui.js';
+import {
+  describeSavedRule,
+  fillFolderSuggestions,
+  h,
+  setFieldError,
+  showFolderError,
+  updateFolderHint,
+} from '../lib/ui.js';
 
 const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 
@@ -23,9 +31,13 @@ const $ = (id) => document.getElementById(id);
 
 let state = { rules: [], settings: { ...DEFAULT_SETTINGS } };
 // The rule being edited in place, with the values typed so far:
-// {id, domain, folder, includeSubdomains, errors}.
+// {id, domain, folder, includeSubdomains, errors, saving}.
 let editing = null;
 let refreshCount = 0;
+// Rules being deleted right now, so a repeated click can't delete twice.
+const deleting = new Set();
+// Rules deleted while the current "Undo" message is showing: [{rule, index}].
+let undoStack = [];
 
 setUpAddForm();
 setUpRuleList();
@@ -70,25 +82,33 @@ function setUpAddForm() {
   domain.addEventListener('input', () => setFieldError(domain, $('add-domain-error'), ''));
   folder.addEventListener('input', () => updateFolderHint(folder, folderHint));
 
+  let adding = false;
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const input = {
-      domain: domain.value,
-      folder: folder.value,
-      includeSubdomains: form.elements.includeSubdomains.checked,
-    };
-    const result = await updateState(({ rules }) => addRule(rules, input));
-    if (!result.ok) {
-      setFieldError(domain, $('add-domain-error'), result.errors.domain);
-      if (result.errors.folder) showFolderError(folder, folderHint, result.errors.folder);
-      (result.errors.domain ? domain : folder).focus();
-      return;
+    if (adding) return;
+    adding = true;
+    try {
+      const input = {
+        domain: domain.value,
+        folder: folder.value,
+        includeSubdomains: form.elements.includeSubdomains.checked,
+      };
+      const result = await updateState(({ rules }) => addRule(rules, input));
+      if (!result.ok) {
+        setFieldError(domain, $('add-domain-error'), result.errors.domain);
+        if (result.errors.folder) showFolderError(folder, folderHint, result.errors.folder);
+        (result.errors.domain ? domain : folder).focus();
+        return;
+      }
+      applyRules(result.rules);
+      form.reset();
+      setFieldError(domain, $('add-domain-error'), '');
+      updateFolderHint(folder, folderHint);
+      domain.focus();
+      showToast(describeSavedRule('Added', result.rule, state.settings));
+    } finally {
+      adding = false;
     }
-    applyRules(result.rules);
-    form.reset();
-    updateFolderHint(folder, folderHint);
-    domain.focus();
-    showToast(`Added. Downloads from ${result.rule.domain} will be saved in ${displayFolder(result.rule.folder)}.`);
   });
 }
 
@@ -247,8 +267,12 @@ function editRow(rule) {
       h(
         'div',
         { className: 'button-row' },
-        h('button', { className: 'btn', type: 'button', dataset: { action: 'cancel' } }, 'Cancel'),
-        h('button', { className: 'btn btn-primary', type: 'submit' }, 'Save'),
+        h(
+          'button',
+          { className: 'btn', type: 'button', dataset: { action: 'cancel', focusKey: `edit-cancel:${rule.id}` } },
+          'Cancel',
+        ),
+        h('button', { className: 'btn btn-primary', type: 'submit', dataset: { focusKey: `edit-save:${rule.id}` } }, 'Save'),
       ),
     ),
   );
@@ -261,10 +285,15 @@ function setUpRuleList() {
   list.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-action]');
     if (!button) return;
+    // The second click of a double-click would land on whatever moved under
+    // the pointer after the first one, such as the next rule's Delete button.
+    if (event.detail > 1) return;
     const id = button.closest('li').dataset.ruleId;
-    if (button.dataset.action === 'edit') startEditing(id);
-    else if (button.dataset.action === 'delete') deleteRule(id);
-    else if (button.dataset.action === 'cancel') stopEditing(id);
+    const { action } = button.dataset;
+    if (action === 'edit') startEditing(id);
+    // A click with detail 0 comes from the keyboard (Enter or Space).
+    else if (action === 'delete') deleteRule(id, { fromKeyboard: event.detail === 0 });
+    else if (action === 'cancel') stopEditing(id);
   });
 
   list.addEventListener('change', (event) => {
@@ -322,9 +351,12 @@ function stopEditing(id) {
 }
 
 async function saveEdit(id) {
-  if (editing?.id !== id) return;
-  const input = { domain: editing.domain, folder: editing.folder, includeSubdomains: editing.includeSubdomains };
+  if (editing?.id !== id || editing.saving) return;
+  const draft = editing;
+  draft.saving = true;
+  const input = { domain: draft.domain, folder: draft.folder, includeSubdomains: draft.includeSubdomains };
   const result = await updateState(({ rules }) => editRule(rules, id, input));
+  draft.saving = false;
   if (!result.ok) {
     if (result.errors.form) {
       editing = null;
@@ -332,7 +364,7 @@ async function saveEdit(id) {
       refresh();
       return;
     }
-    if (editing?.id !== id) return;
+    if (editing !== draft) return;
     editing.errors = result.errors;
     renderRules();
     document.getElementById(result.errors.domain ? `edit-domain-${id}` : `edit-folder-${id}`)?.focus();
@@ -341,7 +373,7 @@ async function saveEdit(id) {
   editing = null;
   applyRules(result.rules);
   focusRuleButton('edit', id);
-  showToast(`Saved. Downloads from ${result.rule.domain} will be saved in ${displayFolder(result.rule.folder)}.`);
+  showToast(describeSavedRule('Saved', result.rule, state.settings));
 }
 
 function focusRuleButton(action, id) {
@@ -360,36 +392,72 @@ async function toggleRule(id, enabled) {
   applyRules(result.rules);
 }
 
-async function deleteRule(id) {
-  // Pick where keyboard focus should go once the row is gone.
-  const sorted = sortRules(state.rules);
-  const position = sorted.findIndex((rule) => rule.id === id);
-  const neighbor = sorted[position + 1] ?? sorted[position - 1];
+async function deleteRule(id, { fromKeyboard }) {
+  if (deleting.has(id)) return;
+  deleting.add(id);
+  try {
+    // Pick where focus should go once the row is gone.
+    const sorted = sortRules(state.rules);
+    const position = sorted.findIndex((rule) => rule.id === id);
+    const neighbor = sorted[position + 1] ?? sorted[position - 1];
 
-  const result = await updateState(({ rules }) => removeRule(rules, id));
-  if (!result.ok) {
-    showToast(result.errors.form);
-    refresh();
-    return;
+    const result = await updateState(({ rules }) => removeRule(rules, id));
+    if (!result.ok) {
+      showToast(result.errors.form);
+      refresh();
+      return;
+    }
+    if (editing?.id === id) editing = null;
+    applyRules(result.rules);
+    if (!neighbor || !focusRuleButton('delete', neighbor.id)) $('rules-title').focus();
+
+    // Deleting several rules in a row lets one Undo bring them all back.
+    const continuing = toastAction === undoDeletes && $('toast').classList.contains('is-visible');
+    if (!continuing) undoStack = [];
+    undoStack.push({ rule: result.rule, index: result.index });
+    const message =
+      undoStack.length === 1 ? `Deleted the rule for ${result.rule.domain}.` : `Deleted ${undoStack.length} rules.`;
+    showToast(message, { actionLabel: 'Undo', onAction: undoDeletes });
+    // Keyboard users couldn't reach the Undo button before it disappears.
+    if (fromKeyboard) $('toast-action').focus();
+  } finally {
+    deleting.delete(id);
   }
-  if (editing?.id === id) editing = null;
-  applyRules(result.rules);
-  if (!neighbor || !focusRuleButton('delete', neighbor.id)) $('rules-title').focus();
-  showToast(`Deleted the rule for ${result.rule.domain}.`, {
-    actionLabel: 'Undo',
-    onAction: () => undoDelete(result.rule, result.index),
-  });
 }
 
-async function undoDelete(rule, index) {
-  const result = await updateState(({ rules }) => restoreRule(rules, rule, index));
-  if (!result.ok) {
-    showToast(result.errors.form);
-    return;
-  }
+async function undoDeletes() {
+  const deleted = undoStack;
+  if (deleted.length === 0) return;
+  const result = await updateState(({ rules }) => {
+    let next = rules;
+    const restored = [];
+    const skipped = [];
+    // Put rules back in the opposite order they were deleted in.
+    for (const { rule, index } of [...deleted].reverse()) {
+      const attempt = restoreRule(next, rule, index);
+      if (attempt.ok) {
+        next = attempt.rules;
+        restored.push(rule);
+      } else {
+        skipped.push(rule);
+      }
+    }
+    return { ok: true, rules: next, restored, skipped };
+  });
+  undoStack = [];
   applyRules(result.rules);
-  focusRuleButton('edit', rule.id);
-  showToast(`Restored the rule for ${rule.domain}.`);
+  const { restored, skipped } = result;
+  const parts = [];
+  if (restored.length === 1) parts.push(`Restored the rule for ${restored[0].domain}.`);
+  if (restored.length > 1) parts.push(`Restored ${restored.length} rules.`);
+  if (skipped.length === 1) {
+    parts.push(`The rule for ${skipped[0].domain} wasn’t restored because there’s a newer rule for it.`);
+  }
+  if (skipped.length > 1) {
+    parts.push(`${skipped.length} rules weren’t restored because there are newer rules for those websites.`);
+  }
+  if (restored.length === 0 || !focusRuleButton('edit', restored[restored.length - 1].id)) $('rules-title').focus();
+  showToast(parts.join(' '));
 }
 
 // ---------------------------------------------------------------------------
@@ -405,7 +473,6 @@ function renderSettings() {
   for (const radio of document.querySelectorAll('input[name="prefer-source"]')) {
     radio.checked = radio.value === settings.preferSource;
   }
-  $('ignore-extensions').checked = settings.ignoreOtherExtensions;
 }
 
 function setUpSettings() {
@@ -419,24 +486,18 @@ function setUpSettings() {
   for (const radio of document.querySelectorAll('input[name="prefer-source"]')) {
     radio.addEventListener('change', () => save({ preferSource: radio.value }));
   }
-  $('ignore-extensions').addEventListener('change', (event) => save({ ignoreOtherExtensions: event.target.checked }));
 }
 
 // ---------------------------------------------------------------------------
 // Download checker
 // ---------------------------------------------------------------------------
 
-// Lets people paste "example.com/file.zip" without typing https://.
-function withScheme(text) {
-  return text === '' || /^[a-z][a-z0-9+.-]*:/i.test(text) ? text : `https://${text}`;
-}
-
 function setUpTester() {
   $('test-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const output = $('test-result');
-    const fileUrl = withScheme($('test-file').value.trim());
-    const pageUrl = withScheme($('test-page').value.trim());
+    const fileUrl = toWebAddress($('test-file').value);
+    const pageUrl = toWebAddress($('test-page').value);
     const show = (message, tone) => {
       output.textContent = message;
       output.dataset.tone = tone;
@@ -448,14 +509,14 @@ function setUpTester() {
     }
     for (const [url, label] of [[fileUrl, 'file'], [pageUrl, 'page']]) {
       if (url !== '' && !hostFromUrl(url)) {
-        show(`The ${label} address isn’t a valid web address (it should start with http:// or https://).`, 'error');
+        show(`The ${label} address isn’t a valid web address, like https://example.com/file.zip.`, 'error');
         return;
       }
     }
 
     const { rules, settings } = await loadState();
     if (!settings.enabled) {
-      show('DownHere is paused, so this file would be saved in Chrome’s usual download folder.', 'neutral');
+      show('DownHere is paused, so it wouldn’t change where this file is saved.', 'neutral');
       return;
     }
     const match = findRuleForDownload({ url: fileUrl, finalUrl: fileUrl, referrer: pageUrl }, rules, settings.preferSource);
@@ -551,6 +612,12 @@ function setUpToast() {
     hideToast();
     action?.();
   });
+  toast.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      hideToast();
+    }
+  });
   // Keep the message up while the pointer or keyboard focus is on it.
   toast.addEventListener('mouseenter', () => clearTimeout(toastTimer));
   toast.addEventListener('focusin', () => clearTimeout(toastTimer));
@@ -575,7 +642,10 @@ function scheduleHide(delay) {
 
 function hideToast() {
   clearTimeout(toastTimer);
-  $('toast').classList.remove('is-visible');
+  const toast = $('toast');
+  // Don't leave keyboard focus on a button that is about to disappear.
+  if (toast.contains(document.activeElement)) $('rules-title').focus();
+  toast.classList.remove('is-visible');
   $('toast-message').textContent = '';
   $('toast-action').hidden = true;
   toastAction = null;

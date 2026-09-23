@@ -86,8 +86,11 @@ select {
   color: inherit;
 }
 
+/* The transparent outline only shows up in forced-colors (high contrast)
+   mode, where box shadows are not drawn. */
 :focus-visible {
-  outline: none;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
   box-shadow: var(--focus-ring);
 }
 
@@ -171,7 +174,8 @@ select {
 .input:focus {
   border-color: var(--accent);
   box-shadow: var(--focus-ring);
-  outline: none;
+  outline: 2px solid transparent;
+  outline-offset: 0;
 }
 
 .input[aria-invalid="true"] {
@@ -261,6 +265,8 @@ input[type="radio"] {
 }
 
 .switch input:focus-visible + .switch-track {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
   box-shadow: var(--focus-ring);
 }
 
@@ -273,5 +279,35 @@ input[type="radio"] {
   .switch-track,
   .switch-track::after {
     transition: none;
+  }
+}
+
+/* Forced colors replace backgrounds, which would hide the switch, so draw it
+   with system colors instead. */
+@media (forced-colors: active) {
+  .switch-track {
+    forced-color-adjust: none;
+    border: 1px solid CanvasText;
+    background: Canvas;
+  }
+
+  .switch-track::after {
+    top: 1px;
+    left: 1px;
+    background: CanvasText;
+    box-shadow: none;
+  }
+
+  .switch input:checked + .switch-track {
+    border-color: Highlight;
+    background: Highlight;
+  }
+
+  .switch input:checked + .switch-track::after {
+    background: HighlightText;
+  }
+
+  .switch input:focus-visible + .switch-track {
+    outline-color: CanvasText;
   }
 }

@@ -232,7 +232,7 @@
 
 /* Backup */
 
-.card .button-row {
+.card > .button-row {
   margin-bottom: 10px;
 }
 
@@ -250,13 +250,16 @@
 
 .toast {
   position: fixed;
-  left: 50%;
+  right: 0;
   bottom: 24px;
+  left: 0;
   z-index: 10;
   display: flex;
   align-items: center;
   gap: 12px;
+  width: fit-content;
   max-width: min(640px, calc(100vw - 32px));
+  margin-inline: auto;
   padding: 10px 12px 10px 16px;
   border-radius: var(--radius);
   background: #1f2328;
@@ -264,14 +267,14 @@
   box-shadow: 0 8px 24px rgb(0 0 0 / 25%);
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, 16px);
+  transform: translateY(16px);
   transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
 .toast.is-visible {
   opacity: 1;
   pointer-events: auto;
-  transform: translate(-50%, 0);
+  transform: none;
 }
 
 .toast .toast-action {
@@ -315,5 +318,19 @@
 
   .rule-actions {
     grid-column: 2;
+  }
+}
+
+/* Forced colors replace backgrounds, so outline boxes that rely on them. */
+@media (forced-colors: active) {
+  .toast,
+  .banner,
+  .test-result:not(:empty) {
+    border: 1px solid CanvasText;
+  }
+
+  .rule-folder::before {
+    forced-color-adjust: none;
+    background: CanvasText;
   }
 }

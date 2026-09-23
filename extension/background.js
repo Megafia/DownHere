@@ -1,14 +1,45 @@
 // Chooses the folder for each download while Chrome is naming the file.
 
-import { resolveDownload } from './lib/rules.js';
+import { isRoutingActive, resolveDownload } from './lib/rules.js';
 import { loadState } from './lib/storage.js';
 
-// The listener must be registered synchronously at startup so that Chrome can
-// wake this service worker for it. It answers asynchronously (after reading
-// the rules), which Chrome only allows when the listener returns exactly
-// `true` - an async function would return a Promise instead. Every path ends
-// in exactly one suggest() call, so a download is never left waiting.
-chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
+const downloadEvent = chrome.downloads.onDeterminingFilename;
+let listenerUpdates = 0;
+
+// Chrome lets the extension that was installed or updated most recently decide
+// every download it is told about, even when it answers "no change", and the
+// file names other extensions ask for are then ignored. So DownHere only
+// listens while it is switched on and has a rule switched on.
+//
+// The listener is still added synchronously on every start, because Chrome can
+// only wake this service worker for events that were registered that way;
+// updateListener() removes it again when it isn't needed.
+downloadEvent.addListener(onDeterminingFilename);
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && ('rules' in changes || 'settings' in changes)) updateListener();
+});
+updateListener();
+
+async function updateListener() {
+  // Only the newest call decides, so an older, slower read can't undo it.
+  const current = ++listenerUpdates;
+  let needed = true;
+  try {
+    const { rules, settings } = await loadState();
+    needed = isRoutingActive(rules, settings);
+  } catch (error) {
+    console.error('DownHere: could not read the rules.', error);
+  }
+  if (current !== listenerUpdates) return;
+  const listening = downloadEvent.hasListener(onDeterminingFilename);
+  if (needed && !listening) downloadEvent.addListener(onDeterminingFilename);
+  if (!needed && listening) downloadEvent.removeListener(onDeterminingFilename);
+}
+
+// Chrome only accepts an asynchronous answer when the listener returns exactly
+// `true` (an async function would return a Promise instead). Every path ends in
+// exactly one suggest() call, so a download is never left waiting.
+function onDeterminingFilename(item, suggest) {
   chooseLocation(item)
     .catch((error) => {
       console.error('DownHere: could not check the rules for a download.', error);
@@ -16,19 +47,19 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
     })
     .then((suggestion) => (suggestion ? suggest(suggestion) : suggest()));
   return true;
-});
+}
 
 /** Returns the suggestion for Chrome, or null to leave the download alone. */
 async function chooseLocation(item) {
   const { rules, settings } = await loadState();
-  const decision = resolveDownload(item, rules, settings, chrome.runtime.id);
+  const decision = resolveDownload(item, rules, settings);
   if (decision.action === 'route') {
     return { filename: decision.filename, conflictAction: decision.conflictAction };
   }
   if (decision.reason === 'unsafe-filename') {
     console.warn(
-      `DownHere: left "${item.filename}" in the Downloads folder because Chrome ` +
-        `doesn't accept that file name inside the "${decision.rule.folder}" folder.`,
+      `DownHere: left "${item.filename}" in the Downloads folder because some versions of Chrome ` +
+        `don't accept that file name inside a folder.`,
     );
   }
   return null;

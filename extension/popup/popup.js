@@ -10,7 +10,14 @@ import {
   setRuleEnabled,
 } from '../lib/rules.js';
 import { loadState, updateSettings, updateState, watchState } from '../lib/storage.js';
-import { fillFolderSuggestions, h, setFieldError, showFolderError, updateFolderHint } from '../lib/ui.js';
+import {
+  describeSavedRule,
+  fillFolderSuggestions,
+  h,
+  setFieldError,
+  showFolderError,
+  updateFolderHint,
+} from '../lib/ui.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -21,7 +28,10 @@ let siteHost = '';
 let formRuleId = null;
 // Set once the person types into the form, so outside changes don't wipe it.
 let formTouched = false;
-let lastDeleted = null;
+// Rules deleted while the current "Undo" message is showing: [{rule, index}].
+let undoStack = [];
+// Set while a save or delete is being written, so repeated clicks are ignored.
+let busy = false;
 let refreshCount = 0;
 
 setUpControls();
@@ -65,7 +75,7 @@ function render({ resetForm }) {
 
   const status = $('site-status');
   if (!settings.enabled) {
-    status.replaceChildren('DownHere is paused. Downloads go to Chrome’s usual download folder.');
+    status.replaceChildren('DownHere is paused, so it doesn’t change where downloads are saved.');
   } else if (active) {
     status.replaceChildren('Downloads from this site are saved in ', h('strong', {}, displayFolder(active.folder)), '.');
   } else {
@@ -95,7 +105,7 @@ function showMessage(text, { undo = false, tone = 'success' } = {}) {
   $('message').textContent = text;
   $('message-box').dataset.tone = tone;
   $('undo').hidden = !undo;
-  if (!undo) lastDeleted = null;
+  if (!undo) undoStack = [];
 }
 
 function setUpControls() {
@@ -118,53 +128,94 @@ function setUpControls() {
 
   $('rule-form').addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (busy) return;
+    busy = true;
+    try {
+      const ruleId = formRuleId;
+      const input = { domain: domain.value, folder: folder.value, includeSubdomains: $('subdomains').checked };
+      const result = await updateState(({ rules }) => (ruleId ? editRule(rules, ruleId, input) : addRule(rules, input)));
+      if (!result.ok) {
+        if (result.errors.form) {
+          showMessage(result.errors.form, { tone: 'error' });
+          await refresh({ resetForm: true });
+          return;
+        }
+        setFieldError(domain, $('domain-error'), result.errors.domain);
+        if (result.errors.folder) showFolderError(folder, $('folder-hint'), result.errors.folder);
+        (result.errors.folder ? folder : domain).focus();
+        return;
+      }
+      state = { ...state, rules: result.rules };
+      render({ resetForm: true });
+      showMessage(describeSavedRule('Saved', result.rule, state.settings));
+    } finally {
+      busy = false;
+    }
+  });
+
+  $('delete-rule').addEventListener('click', async (event) => {
+    // The second click of a double-click would hit the next rule that appears
+    // in the same place (for example the rule for the parent domain).
+    if (event.detail > 1 || busy) return;
     const ruleId = formRuleId;
-    const input = { domain: domain.value, folder: folder.value, includeSubdomains: $('subdomains').checked };
-    const result = await updateState(({ rules }) => (ruleId ? editRule(rules, ruleId, input) : addRule(rules, input)));
-    if (!result.ok) {
-      if (result.errors.form) {
+    if (!ruleId) return;
+    busy = true;
+    try {
+      const result = await updateState(({ rules }) => removeRule(rules, ruleId));
+      if (!result.ok) {
         showMessage(result.errors.form, { tone: 'error' });
         await refresh({ resetForm: true });
         return;
       }
-      setFieldError(domain, $('domain-error'), result.errors.domain);
-      if (result.errors.folder) showFolderError(folder, $('folder-hint'), result.errors.folder);
-      (result.errors.folder ? folder : domain).focus();
-      return;
+      state = { ...state, rules: result.rules };
+      render({ resetForm: true });
+      // Deleting several rules in a row lets one Undo bring them all back.
+      const stack = $('undo').hidden ? [] : undoStack;
+      stack.push({ rule: result.rule, index: result.index });
+      const count = stack.length;
+      showMessage(count === 1 ? `Deleted the rule for ${result.rule.domain}.` : `Deleted ${count} rules.`, { undo: true });
+      undoStack = stack;
+      // A click with detail 0 comes from the keyboard (Enter or Space).
+      (event.detail === 0 ? $('undo') : folder).focus();
+    } finally {
+      busy = false;
     }
-    state = { ...state, rules: result.rules };
-    render({ resetForm: true });
-    showMessage(`Saved. Downloads from ${result.rule.domain} go to ${displayFolder(result.rule.folder)}.`);
-  });
-
-  $('delete-rule').addEventListener('click', async () => {
-    const ruleId = formRuleId;
-    if (!ruleId) return;
-    const result = await updateState(({ rules }) => removeRule(rules, ruleId));
-    if (!result.ok) {
-      showMessage(result.errors.form, { tone: 'error' });
-      await refresh({ resetForm: true });
-      return;
-    }
-    state = { ...state, rules: result.rules };
-    render({ resetForm: true });
-    lastDeleted = { rule: result.rule, index: result.index };
-    showMessage(`Deleted the rule for ${result.rule.domain}.`, { undo: true });
-    folder.focus();
   });
 
   $('undo').addEventListener('click', async () => {
-    if (!lastDeleted) return;
-    const { rule, index } = lastDeleted;
-    const result = await updateState(({ rules }) => restoreRule(rules, rule, index));
-    if (!result.ok) {
-      showMessage(result.errors.form, { tone: 'error' });
-      return;
+    if (busy || undoStack.length === 0) return;
+    const deleted = undoStack;
+    busy = true;
+    try {
+      const result = await updateState(({ rules }) => {
+        let next = rules;
+        const restored = [];
+        // Put rules back in the opposite order they were deleted in.
+        for (const { rule, index } of [...deleted].reverse()) {
+          const attempt = restoreRule(next, rule, index);
+          if (attempt.ok) {
+            next = attempt.rules;
+            restored.push(rule);
+          }
+        }
+        return { ok: true, rules: next, restored };
+      });
+      state = { ...state, rules: result.rules };
+      render({ resetForm: true });
+      const { restored } = result;
+      const missing = deleted.length - restored.length;
+      if (restored.length === 0) {
+        showMessage('Nothing was restored because there are newer rules for those websites.', { tone: 'error' });
+      } else {
+        showMessage(
+          (restored.length === 1 ? `Restored the rule for ${restored[0].domain}.` : `Restored ${restored.length} rules.`) +
+            (missing > 0 ? ` ${missing} couldn’t be restored because there are newer rules for those websites.` : ''),
+        );
+      }
+      folder.focus();
+    } finally {
+      busy = false;
     }
-    state = { ...state, rules: result.rules };
-    render({ resetForm: true });
-    showMessage(`Restored the rule for ${rule.domain}.`);
-    folder.focus();
   });
 
   $('turn-on').addEventListener('click', async () => {

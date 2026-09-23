@@ -15,6 +15,7 @@ import {
   hostFromUrl,
   hostMatchesRule,
   isReservedWindowsName,
+  isRoutingActive,
   mergeRules,
   normalizeDomain,
   normalizeFolder,
@@ -26,6 +27,7 @@ import {
   sanitizeSettings,
   setRuleEnabled,
   sortRules,
+  toWebAddress,
   validateRuleInput,
 } from '../extension/lib/rules.js';
 
@@ -52,6 +54,19 @@ describe('normalizeDomain', () => {
   it('treats www. as the bare domain and ignores a trailing dot', () => {
     assert.equal(normalizeDomain('www.example.com').domain, 'example.com');
     assert.equal(normalizeDomain('https://WWW.Example.com./').domain, 'example.com');
+  });
+
+  it('keeps www. when only one label would be left', () => {
+    assert.equal(normalizeDomain('www.com').domain, 'www.com');
+    assert.equal(normalizeDomain('www').domain, 'www');
+    assert.equal(hostFromUrl('https://www.com/a'), 'www.com');
+  });
+
+  it('reads http:/ and https: without slashes as typos', () => {
+    assert.equal(normalizeDomain('http:/example.com').domain, 'example.com');
+    assert.equal(normalizeDomain('HTTPS:example.com/page').domain, 'example.com');
+    assert.equal(normalizeDomain('localhost:3000').domain, 'localhost');
+    assert.equal(normalizeDomain('http:').ok, false);
   });
 
   it('turns *. and leading-dot prefixes into wildcards', () => {
@@ -102,6 +117,24 @@ describe('hostFromUrl', () => {
       'https://exa mple.com/x', 'https://ht!tp://bad', 'https://a..b.com/']) {
       assert.equal(hostFromUrl(url), '', `expected no host for ${String(url)}`);
     }
+  });
+});
+
+describe('toWebAddress', () => {
+  it('adds https:// to addresses typed without a scheme', () => {
+    assert.equal(toWebAddress(' example.com/file.zip '), 'https://example.com/file.zip');
+    assert.equal(toWebAddress('example.com:8080/file.zip'), 'https://example.com:8080/file.zip');
+    assert.equal(toWebAddress('localhost:3000/a'), 'https://localhost:3000/a');
+  });
+
+  it('fixes http:/ typos and keeps full addresses', () => {
+    assert.equal(toWebAddress('http:/example.com/a'), 'http://example.com/a');
+    assert.equal(toWebAddress('https:example.com'), 'https://example.com');
+    for (const url of ['https://example.com/a', 'http://x.org', 'blob:https://a.com/1', 'data:,x', 'file:///tmp/a',
+      'ftp://x.com/a', '']) {
+      assert.equal(toWebAddress(url), url);
+    }
+    assert.equal(toWebAddress(undefined), '');
   });
 });
 
@@ -304,7 +337,7 @@ describe('resolveDownload', () => {
   const item = download({ url: 'https://example.com/report.pdf' });
 
   it('routes matching downloads', () => {
-    assert.deepEqual(resolveDownload(item, rules, DEFAULT_SETTINGS, 'self'), {
+    assert.deepEqual(resolveDownload(item, rules, DEFAULT_SETTINGS), {
       action: 'route',
       filename: 'Example/report.pdf',
       conflictAction: 'uniquify',
@@ -316,37 +349,44 @@ describe('resolveDownload', () => {
 
   it('passes the chosen conflict action on', () => {
     const settings = { ...DEFAULT_SETTINGS, conflictAction: 'overwrite' };
-    assert.equal(resolveDownload(item, rules, settings, 'self').conflictAction, 'overwrite');
+    assert.equal(resolveDownload(item, rules, settings).conflictAction, 'overwrite');
   });
 
   it('does nothing while paused', () => {
     const settings = { ...DEFAULT_SETTINGS, enabled: false };
-    assert.deepEqual(resolveDownload(item, rules, settings, 'self'), { action: 'skip', reason: 'disabled' });
+    assert.deepEqual(resolveDownload(item, rules, settings), { action: 'skip', reason: 'disabled' });
   });
 
   it('leaves local files alone', () => {
     const local = download({ url: 'file:///home/me/report.pdf', referrer: 'https://example.com/' });
-    assert.equal(resolveDownload(local, rules, DEFAULT_SETTINGS, 'self').reason, 'local-file');
+    assert.equal(resolveDownload(local, rules, DEFAULT_SETTINGS).reason, 'local-file');
   });
 
-  it('handles downloads started by extensions', () => {
-    const own = { ...item, byExtensionId: 'self' };
-    const other = { ...item, byExtensionId: 'other' };
-    assert.equal(resolveDownload(own, rules, DEFAULT_SETTINGS, 'self').reason, 'extension');
-    assert.equal(resolveDownload(other, rules, DEFAULT_SETTINGS, 'self').action, 'route');
-    const ignoring = { ...DEFAULT_SETTINGS, ignoreOtherExtensions: true };
-    assert.equal(resolveDownload(other, rules, ignoring, 'self').reason, 'extension');
+  it('routes downloads started by extensions like any other', () => {
+    const fromExtension = { ...item, byExtensionId: 'abcdefghijklmnopabcdefghijklmnop' };
+    assert.equal(resolveDownload(fromExtension, rules, DEFAULT_SETTINGS).action, 'route');
   });
 
   it('explains why a download is skipped', () => {
     const unknown = download({ url: 'https://unknown.net/a.zip' });
-    assert.equal(resolveDownload(unknown, rules, DEFAULT_SETTINGS, 'self').reason, 'no-rule');
+    assert.equal(resolveDownload(unknown, rules, DEFAULT_SETTINGS).reason, 'no-rule');
     const unsafe = download({ url: 'https://example.com/x', filename: 'x.lnk' });
-    assert.deepEqual(resolveDownload(unsafe, rules, DEFAULT_SETTINGS, 'self'), {
+    assert.deepEqual(resolveDownload(unsafe, rules, DEFAULT_SETTINGS), {
       action: 'skip',
       reason: 'unsafe-filename',
       rule: rules[0],
     });
+  });
+});
+
+describe('isRoutingActive', () => {
+  it('is true only when switched on with at least one rule switched on', () => {
+    const on = rule('a.com', 'A');
+    const off = rule('b.com', 'B', { enabled: false });
+    assert.equal(isRoutingActive([on, off], DEFAULT_SETTINGS), true);
+    assert.equal(isRoutingActive([off], DEFAULT_SETTINGS), false);
+    assert.equal(isRoutingActive([], DEFAULT_SETTINGS), false);
+    assert.equal(isRoutingActive([on], { ...DEFAULT_SETTINGS, enabled: false }), false);
   });
 });
 
@@ -361,14 +401,12 @@ describe('sanitizeSettings', () => {
       enabled: false,
       conflictAction: 'prompt',
       preferSource: 'nope',
-      ignoreOtherExtensions: 'yes',
-      extra: 1,
+      ignoreOtherExtensions: true,
     });
     assert.deepEqual(settings, {
       enabled: false,
       conflictAction: 'prompt',
       preferSource: 'page',
-      ignoreOtherExtensions: false,
     });
   });
 });

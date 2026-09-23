@@ -16,7 +16,7 @@ those sites lands in the right folder without a Save As dialog.
   automatically.
 - **Set up in seconds.** Open a site, click the DownHere button, type a folder name, save.
 - **Subdomains included if you want them.** One rule for `google.com` can cover `drive.google.com` and
-  `mail.google.com`, or you can give each its own folder. The most specific rule always wins.
+  `mail.google.com`, or you can give each its own folder. When several rules fit, the most specific one wins.
 - **Understands where a download really comes from.** Rules match the page you downloaded from as well as the file’s
   own address, before and after redirects (for example, GitHub release files are served from another domain).
 - **Your choice when a name is taken.** Keep both files, replace the old one, or be asked.
@@ -58,7 +58,9 @@ up your rules.
 - Every download has two addresses: the **page** you were on and the **file’s own address**. DownHere checks the page
   first, then the file’s address before and after any redirects. The first address that has a rule decides the folder.
   In the settings you can make the file’s own address go first instead.
-- When several rules fit an address, the most specific one wins: a rule for `docs.example.com` beats one for
+- The page address is the one Chrome records as the download’s referrer. Some websites and links hide it; then only
+  the file’s own address is checked. For a download started inside an embedded frame, it is the frame’s address.
+- When several rules fit the same address, the most specific one wins: a rule for `docs.example.com` beats one for
   `example.com`.
 - Rules that are switched off are skipped. Downloads that match no rule are saved wherever Chrome would normally put
   them.
@@ -76,26 +78,31 @@ up your rules.
   replace the existing file, or ask where to save the new one.
 - **If the page and the file match different rules:** use the rule for the page (default) or for the file’s own
   address.
-- **Downloads started by other extensions:** DownHere sorts them too, unless you tell it to leave them where those
-  extensions save them.
-- **On / Paused:** the switch at the top of the popup and the settings page turns all rules on or off at once.
+- **On / Paused:** the switch at the top of the popup and the settings page turns all rules on or off at once. While
+  paused, DownHere doesn’t change any download.
 
 ## Good to know
 
 - Chrome only lets extensions save files inside your Downloads folder, the location set in Chrome’s
   **Settings › Downloads**. Your rule folders are created inside it. To use a different base folder, change that
   location in Chrome.
-- DownHere only chooses the folder. Files keep the name Chrome gives them. In the rare case that Chrome doesn’t accept
-  a file’s name inside a folder (such as `CON.txt`, which is reserved on Windows), the file is saved in the Downloads
-  folder as usual.
+- Use real folders for rules. Newer versions of Chrome don’t follow symbolic links or junctions that lead outside the
+  Downloads folder.
+- DownHere only chooses the folder. Files keep the name Chrome gives them. A few file names aren’t accepted inside
+  folders by every version of Chrome, such as `CON.txt` (reserved on Windows) or shortcut files ending in `.lnk`,
+  `.url` or `.scf`. DownHere leaves those files in the Downloads folder.
 - If Chrome is set to ask where to save each file, the save dialog suggests the rule’s folder.
 - Files opened from your own computer (`file://` addresses) are never moved.
 - Rules only apply in Incognito windows if you allow DownHere in Incognito
   (`chrome://extensions` › DownHere › **Details**).
-- Only one extension can choose where a download is saved. If another extension does this too, Chrome follows the one
-  that was installed or updated most recently.
-- On Linux, folder and file names with non-English characters need a UTF-8 system locale (the default on current
-  distributions); otherwise Chrome saves those files in the Downloads folder.
+- While DownHere is on and has a rule switched on, Chrome ignores the folder and file name that other extensions ask
+  for when they download something: those downloads are sorted by your rules like any other, or saved in the
+  Downloads folder with the name Chrome gives them. Pause DownHere to let other extensions choose again.
+- If you also use another extension that sorts or renames downloads, Chrome lets only one of them decide while both
+  are active: the one installed or updated most recently, even for downloads it doesn’t change. Use one such
+  extension at a time.
+- On Linux, folder names with non-English characters need a UTF-8 system locale (the default on current
+  distributions); otherwise Chrome saves the files in the Downloads folder instead.
 
 ## Privacy and permissions
 
