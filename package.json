@@ -1,0 +1,14 @@
+{
+  "name": "downhere",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome extension that saves downloads from each website into a folder you choose.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "package": "node scripts/package.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

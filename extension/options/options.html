@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DownHere settings</title>
+  <link rel="icon" href="../icons/icon-32.png">
+  <link rel="stylesheet" href="../styles/common.css">
+  <link rel="stylesheet" href="options.css">
+  <script type="module" src="options.js"></script>
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <img class="logo" src="../icons/icon-128.png" alt="" width="44" height="44">
+      <div class="title">
+        <h1>DownHere</h1>
+        <p class="tagline">Save downloads from each website into a folder you choose.</p>
+      </div>
+      <label class="switch">
+        <span class="switch-text" id="enabled-text">On</span>
+        <input type="checkbox" role="switch" id="enabled" aria-label="Use DownHere rules">
+        <span class="switch-track" aria-hidden="true"></span>
+      </label>
+    </header>
+
+    <p class="banner" id="paused-banner" hidden>
+      DownHere is paused. All downloads go to Chrome’s usual download folder until you switch it back on.
+    </p>
+
+    <main>
+      <section class="card" aria-labelledby="add-title">
+        <h2 id="add-title">Add a rule</h2>
+        <p class="intro">Files you download from the website are saved in the folder you choose, inside your Downloads folder.</p>
+        <form class="rule-form" id="add-form" novalidate>
+          <div class="field">
+            <label class="label" for="add-domain">Website</label>
+            <input class="input" id="add-domain" name="domain" type="text" placeholder="example.com"
+              autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="add-domain-error">
+            <p class="error" id="add-domain-error" hidden></p>
+          </div>
+          <div class="field">
+            <label class="label" for="add-folder">Folder</label>
+            <input class="input" id="add-folder" name="folder" type="text" placeholder="Example"
+              list="folder-suggestions" autocomplete="off" spellcheck="false" aria-describedby="add-folder-hint">
+            <p class="hint" id="add-folder-hint"></p>
+          </div>
+          <div class="form-footer">
+            <label class="check">
+              <input type="checkbox" name="includeSubdomains" checked>
+              Include subdomains (such as files.example.com)
+            </label>
+            <button class="btn btn-primary" type="submit">Add rule</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="rules-title">
+        <h2 id="rules-title" tabindex="-1">Rules <span class="count" id="rule-count"></span></h2>
+        <p class="empty" id="rules-empty">
+          No rules yet. Add one above, or click the DownHere button in Chrome’s toolbar while you’re on a website.
+        </p>
+        <ul class="rule-list" id="rule-list"></ul>
+      </section>
+
+      <section class="card" aria-labelledby="settings-title">
+        <h2 id="settings-title">Settings</h2>
+        <div class="setting">
+          <label class="label" for="conflict-action">If the folder already has a file with the same name</label>
+          <select class="input" id="conflict-action">
+            <option value="uniquify">Keep both (add a number to the new file’s name)</option>
+            <option value="overwrite">Replace the existing file</option>
+            <option value="prompt">Ask me where to save the new file</option>
+          </select>
+          <p class="hint">Applies to downloads that DownHere puts into a folder.</p>
+        </div>
+        <fieldset class="setting">
+          <legend class="label">If the page and the file match different rules</legend>
+          <label class="check">
+            <input type="radio" name="prefer-source" value="page">
+            Use the rule for the page you downloaded from
+          </label>
+          <label class="check">
+            <input type="radio" name="prefer-source" value="file">
+            Use the rule for the file’s own web address
+          </label>
+          <p class="hint">
+            Example: on reddit.com you save an image that is stored on imgur.com. When only one of the two sites
+            has a rule, that rule is used.
+          </p>
+        </fieldset>
+        <div class="setting">
+          <label class="check">
+            <input type="checkbox" id="ignore-extensions">
+            Leave downloads started by other extensions where those extensions save them
+          </label>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="test-title">
+        <h2 id="test-title">Check where a download will go</h2>
+        <form class="test-form" id="test-form" novalidate>
+          <div class="field">
+            <label class="label" for="test-file">File address</label>
+            <input class="input" id="test-file" type="text" inputmode="url" placeholder="https://example.com/files/report.pdf"
+              autocomplete="off" spellcheck="false">
+          </div>
+          <div class="field">
+            <label class="label" for="test-page">Page you download it from <span class="optional">(optional)</span></label>
+            <input class="input" id="test-page" type="text" inputmode="url" placeholder="https://example.com/downloads"
+              autocomplete="off" spellcheck="false">
+          </div>
+          <div class="form-footer">
+            <button class="btn" type="submit">Check</button>
+          </div>
+        </form>
+        <p class="test-result" id="test-result" role="status"></p>
+      </section>
+
+      <section class="card" aria-labelledby="backup-title">
+        <h2 id="backup-title">Back up and restore</h2>
+        <p class="intro">Save your rules and settings to a file, or load them from one, for example on another computer.</p>
+        <div class="button-row">
+          <button class="btn" type="button" id="export">Export to file</button>
+          <button class="btn" type="button" id="import">Import from file</button>
+          <input type="file" id="import-file" accept=".json,application/json" hidden>
+        </div>
+        <p class="hint">
+          Importing adds the rules from the file and replaces your rules for the same websites. Your other rules are
+          kept. Settings are restored from the file too.
+        </p>
+      </section>
+
+      <section class="card notes" aria-labelledby="notes-title">
+        <h2 id="notes-title">Good to know</h2>
+        <ul>
+          <li>
+            Chrome only lets extensions save files inside your Downloads folder (the location set in Chrome’s
+            Settings › Downloads). DownHere creates the folders you choose there automatically.
+          </li>
+          <li>
+            A rule for example.com also covers www.example.com. Switch on “Include subdomains” to cover addresses
+            such as files.example.com too. When several rules fit, the most specific one wins.
+          </li>
+          <li>DownHere only chooses the folder. Files keep the name Chrome gives them.</li>
+          <li>If Chrome is set to ask where to save each file, the save dialog suggests the rule’s folder.</li>
+          <li>
+            Rules only apply in Incognito windows if you allow DownHere in Incognito (chrome://extensions ›
+            DownHere › Details).
+          </li>
+          <li>
+            Only one extension can choose where a download is saved. If another extension does this too, Chrome
+            follows the one that was installed or updated most recently.
+          </li>
+          <li>Your rules are stored only in this browser. DownHere doesn’t send any data anywhere.</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+
+  <datalist id="folder-suggestions"></datalist>
+
+  <div class="toast" id="toast">
+    <p class="toast-message" id="toast-message" role="status"></p>
+    <button class="btn btn-quiet toast-action" type="button" id="toast-action" hidden></button>
+  </div>
+</body>
+</html>

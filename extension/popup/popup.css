@@ -1,0 +1,94 @@
+html body {
+  width: 340px;
+  background: var(--surface);
+}
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.popup-header h1 {
+  flex: 1;
+  font-size: 15px;
+}
+
+.popup-body {
+  padding: 14px 16px 16px;
+}
+
+.no-site {
+  color: var(--text-muted);
+}
+
+.eyebrow {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.site-host {
+  font-size: 17px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.site-status {
+  margin-top: 4px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.site-status strong {
+  color: var(--text);
+}
+
+.rule-off {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 6px 6px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.popup-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--success);
+  overflow-wrap: anywhere;
+}
+
+.popup-footer {
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.message[data-tone="error"] {
+  color: var(--danger);
+}

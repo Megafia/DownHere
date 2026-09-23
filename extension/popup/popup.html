@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>DownHere</title>
+  <link rel="stylesheet" href="../styles/common.css">
+  <link rel="stylesheet" href="popup.css">
+  <script type="module" src="popup.js"></script>
+</head>
+<body>
+  <header class="popup-header">
+    <img class="logo" src="../icons/icon-32.png" alt="" width="20" height="20">
+    <h1>DownHere</h1>
+    <label class="switch">
+      <span class="switch-text" id="enabled-text">On</span>
+      <input type="checkbox" role="switch" id="enabled" aria-label="Use DownHere rules">
+      <span class="switch-track" aria-hidden="true"></span>
+    </label>
+  </header>
+
+  <main class="popup-body">
+    <p class="no-site" id="no-site" hidden>
+      Open a website, then click DownHere to choose the folder for files you download from it.
+    </p>
+
+    <section id="site" hidden aria-labelledby="site-host">
+      <p class="eyebrow">This site</p>
+      <p class="site-host" id="site-host"></p>
+      <p class="site-status" id="site-status"></p>
+      <div class="rule-off" id="rule-off" hidden>
+        <span id="rule-off-text"></span>
+        <button class="btn btn-quiet" type="button" id="turn-on">Switch on</button>
+      </div>
+
+      <form class="popup-form" id="rule-form" novalidate>
+        <div class="field">
+          <label class="label" for="folder">Save downloads in</label>
+          <input class="input" id="folder" name="folder" type="text" placeholder="Folder name"
+            list="folder-suggestions" autocomplete="off" spellcheck="false" aria-describedby="folder-hint">
+          <p class="hint" id="folder-hint"></p>
+        </div>
+        <div class="field">
+          <label class="label" for="domain">For the website</label>
+          <input class="input" id="domain" name="domain" type="text"
+            autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="domain-error">
+          <p class="error" id="domain-error" hidden></p>
+        </div>
+        <label class="check">
+          <input type="checkbox" id="subdomains" checked>
+          Include subdomains
+        </label>
+        <div class="actions">
+          <button class="btn btn-primary" type="submit" id="save">Save</button>
+          <button class="btn btn-quiet btn-danger" type="button" id="delete-rule" hidden>Delete rule</button>
+        </div>
+      </form>
+
+      <div class="message" id="message-box">
+        <p id="message" role="status"></p>
+        <button class="btn btn-quiet" type="button" id="undo" hidden>Undo</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="popup-footer">
+    <button class="btn btn-quiet" type="button" id="open-options">All rules and settings</button>
+  </footer>
+
+  <datalist id="folder-suggestions"></datalist>
+</body>
+</html>
