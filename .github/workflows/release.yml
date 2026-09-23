@@ -1,14 +1,23 @@
 name: Release
 
-# Publishes a GitHub release with the packaged extension when a version tag
-# such as v0.1.0 is pushed. See "Releasing a new version" in README.md.
+# Builds the extension ZIP and publishes it in a GitHub release for a version
+# tag such as v0.1.0. It runs when a release is published on GitHub and when a
+# version tag is pushed, and does the same work either way, so running twice
+# for one tag is harmless. See "Releasing a new version" in README.md.
 on:
+  release:
+    types:
+      - published
   push:
     tags:
       - 'v*'
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -50,12 +59,23 @@ jobs:
             exit 1
           fi
 
-      - name: Publish the release
+      - name: Publish the ZIP in the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "dist/downhere-$VERSION.zip" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "DownHere $VERSION" \
-            --notes-file release-notes.md \
-            --verify-tag
+          zip="dist/downhere-$VERSION.zip"
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            # The release already exists, for example because it was published
+            # on GitHub: attach the ZIP, and add the notes if it has none.
+            gh release upload "$GITHUB_REF_NAME" "$zip" --repo "$GITHUB_REPOSITORY" --clobber
+            body="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
+            if [ -z "$body" ]; then
+              gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --notes-file release-notes.md
+            fi
+          else
+            gh release create "$GITHUB_REF_NAME" "$zip" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "DownHere $VERSION" \
+              --notes-file release-notes.md \
+              --verify-tag
+          fi

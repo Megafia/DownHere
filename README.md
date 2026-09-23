@@ -146,22 +146,24 @@ assets/icon.svg      Source of the icons
 docs/screenshots/    Images used in this README
 scripts/package.mjs  Builds the ZIP for the Chrome Web Store and releases
 tests/               Unit tests (Node's built-in test runner)
-.github/workflows/   Publishes a GitHub release when a version tag is pushed
+.github/workflows/   Adds the built ZIP to each GitHub release
 ```
 
 ### Releasing a new version
 
 1. Update `version` in both `extension/manifest.json` and `package.json`, and describe the changes in
-   [CHANGELOG.md](CHANGELOG.md) under a heading like `## 0.2.0 – 2026-10-01`.
-2. Commit the changes to `main`, then tag that commit and push the tag:
+   [CHANGELOG.md](CHANGELOG.md) under a heading like `## 0.2.0 – 2026-10-01`. Commit the changes to `main`.
+2. Publish a release for the tag `v` + the version, either on GitHub (**Releases** › **Draft a new release**, type
+   `v0.2.0` as a new tag on `main`, then **Publish release**) or from the command line:
 
    ```sh
    git tag -a v0.2.0 -m "DownHere 0.2.0"
    git push origin v0.2.0
    ```
 
-3. The **Release** workflow then runs the tests, builds `downhere-0.2.0.zip` and publishes a GitHub release with the
-   notes from the changelog. It stops without publishing if the tag doesn’t match the version in both files.
+3. The **Release** workflow then runs the tests, builds `downhere-0.2.0.zip` and attaches it to the release (it
+   creates the release if you only pushed a tag). If the release has no description, it uses the notes from the
+   changelog. It stops with an error if the tag doesn’t match the version in both files.
 4. To update the Chrome Web Store listing, upload the same ZIP in the Chrome Web Store Developer Dashboard.
 
 ## License
