@@ -1,6 +1,6 @@
-// Builds dist/downhere-<version>.zip from the extension folder, ready to upload
-// to the Chrome Web Store or attach to a release. Uses only Node's standard
-// library, and the output only changes when the extension files change.
+// Builds dist/downhere-<version>.zip from the extension folder plus the license,
+// ready to upload to the Chrome Web Store or attach to a release. Uses only
+// Node's standard library, and the output only changes when the files change.
 
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
@@ -44,8 +44,13 @@ const localParts = [];
 const centralParts = [];
 let offset = 0;
 
-for (const path of listFiles(source)) {
-  const name = Buffer.from(relative(source, path).split(sep).join('/'), 'utf8');
+const entries = [
+  ...listFiles(source).map((path) => [relative(source, path).split(sep).join('/'), path]),
+  ['LICENSE', join(root, 'LICENSE')],
+];
+
+for (const [entryName, path] of entries) {
+  const name = Buffer.from(entryName, 'utf8');
   const data = readFileSync(path);
   const deflated = deflateRawSync(data, { level: 9 });
   const useDeflate = deflated.length < data.length;

@@ -29,14 +29,17 @@ those sites lands in the right folder without a Save As dialog.
 
 ## Install
 
-DownHere isn’t in the Chrome Web Store yet. To install it from this repository:
+DownHere isn’t in the Chrome Web Store yet. To install it:
 
-1. Download this repository (green **Code** button › **Download ZIP**) and unzip it, or clone it with Git.
+1. Download `downhere-<version>.zip` from the [latest release](https://github.com/Megafia/DownHere/releases/latest)
+   and unzip it into a folder you’ll keep. Chrome loads the extension from that folder, so don’t delete it.
 2. Open `chrome://extensions` in Chrome.
 3. Switch on **Developer mode** (top-right corner).
-4. Click **Load unpacked** and select the `extension` folder inside the repository.
+4. Click **Load unpacked** and select the unzipped folder (the one that contains `manifest.json`).
 5. Optional: open the puzzle-piece **Extensions** menu next to the address bar and pin DownHere so its button is
    always visible.
+
+To run DownHere from the source code instead, clone this repository and select its `extension` folder in step 4.
 
 DownHere needs Chrome 120 or newer. Other Chromium-based browsers may work too, but haven’t been tested.
 
@@ -141,14 +144,26 @@ extension/
   icons/             Extension icons
 assets/icon.svg      Source of the icons
 docs/screenshots/    Images used in this README
-scripts/package.mjs  Builds the ZIP for the Chrome Web Store
+scripts/package.mjs  Builds the ZIP for the Chrome Web Store and releases
 tests/               Unit tests (Node's built-in test runner)
+.github/workflows/   Publishes a GitHub release when a version tag is pushed
 ```
 
 ### Releasing a new version
 
-1. Update `version` in both `extension/manifest.json` and `package.json`.
-2. Describe the changes in [CHANGELOG.md](CHANGELOG.md).
-3. Run `npm test` and `npm run package`.
-4. Upload `dist/downhere-<version>.zip` in the Chrome Web Store Developer Dashboard, and/or create a GitHub release
-   tagged `v<version>` with the ZIP attached.
+1. Update `version` in both `extension/manifest.json` and `package.json`, and describe the changes in
+   [CHANGELOG.md](CHANGELOG.md) under a heading like `## 0.2.0 – 2026-10-01`.
+2. Commit the changes to `main`, then tag that commit and push the tag:
+
+   ```sh
+   git tag -a v0.2.0 -m "DownHere 0.2.0"
+   git push origin v0.2.0
+   ```
+
+3. The **Release** workflow then runs the tests, builds `downhere-0.2.0.zip` and publishes a GitHub release with the
+   notes from the changelog. It stops without publishing if the tag doesn’t match the version in both files.
+4. To update the Chrome Web Store listing, upload the same ZIP in the Chrome Web Store Developer Dashboard.
+
+## License
+
+DownHere is released under the [MIT License](LICENSE).

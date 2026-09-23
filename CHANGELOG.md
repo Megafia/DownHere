@@ -8,7 +8,7 @@ First release.
 
 - Save downloads from chosen websites into folders inside the Downloads folder, including nested folders.
 - Rules match the page a download comes from and the file’s own address (before and after redirects), with or
-  without subdomains. The most specific rule wins.
+  without subdomains. When several rules fit the same address, the most specific one wins.
 - Toolbar popup to choose the folder for the current website.
 - Settings page to add, edit, switch off and delete rules (with undo).
 - Settings for file name conflicts and page-or-file priority, plus a switch to pause DownHere.
