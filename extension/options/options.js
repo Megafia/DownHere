@@ -34,8 +34,8 @@ let state = { rules: [], settings: { ...DEFAULT_SETTINGS } };
 // {id, domain, folder, includeSubdomains, errors, saving}.
 let editing = null;
 let refreshCount = 0;
-// Rules being deleted right now, so a repeated click can't delete twice.
-const deleting = new Set();
+// Set while a delete or an undo is being saved, so they can't overlap.
+let busy = false;
 // Rules deleted while the current "Undo" message is showing: [{rule, index}].
 let undoStack = [];
 
@@ -393,8 +393,8 @@ async function toggleRule(id, enabled) {
 }
 
 async function deleteRule(id, { fromKeyboard }) {
-  if (deleting.has(id)) return;
-  deleting.add(id);
+  if (busy) return;
+  busy = true;
   try {
     // Pick where focus should go once the row is gone.
     const sorted = sortRules(state.rules);
@@ -421,13 +421,22 @@ async function deleteRule(id, { fromKeyboard }) {
     // Keyboard users couldn't reach the Undo button before it disappears.
     if (fromKeyboard) $('toast-action').focus();
   } finally {
-    deleting.delete(id);
+    busy = false;
   }
 }
 
 async function undoDeletes() {
   const deleted = undoStack;
-  if (deleted.length === 0) return;
+  if (deleted.length === 0 || busy) return;
+  busy = true;
+  try {
+    await restoreDeleted(deleted);
+  } finally {
+    busy = false;
+  }
+}
+
+async function restoreDeleted(deleted) {
   const result = await updateState(({ rules }) => {
     let next = rules;
     const restored = [];
@@ -627,6 +636,8 @@ function setUpToast() {
 
 function showToast(message, { actionLabel, onAction } = {}) {
   const action = $('toast-action');
+  // Don't leave keyboard focus on an Undo button that is about to disappear.
+  if (!actionLabel && $('toast').contains(document.activeElement)) $('rules-title').focus();
   $('toast-message').textContent = message;
   toastAction = actionLabel ? onAction : null;
   action.textContent = actionLabel ?? '';

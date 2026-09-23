@@ -88,9 +88,10 @@ up your rules.
   location in Chrome.
 - Use real folders for rules. Newer versions of Chrome don’t follow symbolic links or junctions that lead outside the
   Downloads folder.
-- DownHere only chooses the folder. Files keep the name Chrome gives them. A few file names aren’t accepted inside
-  folders by every version of Chrome, such as `CON.txt` (reserved on Windows) or shortcut files ending in `.lnk`,
-  `.url` or `.scf`. DownHere leaves those files in the Downloads folder.
+- DownHere only chooses the folder. Files keep the name Chrome gives them. A few names, such as `CON.txt` or shortcut
+  files ending in `.lnk`, `.url` or `.scf`, aren’t accepted inside folders by every version of Chrome, so DownHere
+  leaves those files in the Downloads folder. On Windows, Chrome renames such files first (for example to
+  `_CON.txt`), so they are sorted as usual.
 - If Chrome is set to ask where to save each file, the save dialog suggests the rule’s folder.
 - Files opened from your own computer (`file://` addresses) are never moved.
 - Rules only apply in Incognito windows if you allow DownHere in Incognito
@@ -98,9 +99,9 @@ up your rules.
 - While DownHere is on and has a rule switched on, Chrome ignores the folder and file name that other extensions ask
   for when they download something: those downloads are sorted by your rules like any other, or saved in the
   Downloads folder with the name Chrome gives them. Pause DownHere to let other extensions choose again.
-- If you also use another extension that sorts or renames downloads, Chrome lets only one of them decide while both
-  are active: the one installed or updated most recently, even for downloads it doesn’t change. Use one such
-  extension at a time.
+- If another extension also watches downloads while Chrome names them (download managers and organizers often do),
+  Chrome lets only one of them decide while both are active: the one installed or updated most recently, even for
+  downloads it doesn’t change. If DownHere stops sorting your files, check for such an extension.
 - On Linux, folder names with non-English characters need a UTF-8 system locale (the default on current
   distributions); otherwise Chrome saves the files in the Downloads folder instead.
 
