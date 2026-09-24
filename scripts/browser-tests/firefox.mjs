@@ -251,6 +251,29 @@ try {
   if (!optionsTab) throw new Error('DownHere’s settings page didn’t open.');
   pageTab ??= (await send('browsingContext.create', { type: 'tab' })).context;
 
+  // Collects the settings page's errors, and describes the page when a check
+  // about it fails.
+  await evaluate(
+    optionsTab,
+    `window.pageErrors = [];
+    addEventListener('error', (event) => pageErrors.push(String(event.message)));
+    addEventListener('unhandledrejection', (event) => pageErrors.push(String(event.reason?.message ?? event.reason)));`,
+  );
+  const optionsLoadedAt = await evaluate(optionsTab, 'performance.timeOrigin');
+  const describeSettingsPage = () =>
+    evaluate(
+      optionsTab,
+      `chrome.storage.local.get('rules').then(({ rules }) => JSON.stringify({
+        reloaded: performance.timeOrigin !== ${optionsLoadedAt},
+        address: location.href,
+        state: document.readyState,
+        list: document.getElementById('rule-list').innerHTML.slice(0, 400),
+        stored: rules,
+        errors: window.pageErrors,
+      }))`,
+    ).catch((error) => error.message);
+  const ruleListed = `Boolean(document.querySelector('[data-rule-id="test"] [data-action="edit"]'))`;
+
   await evaluate(
     optionsTab,
     `chrome.storage.local.set({
@@ -258,6 +281,8 @@ try {
       settings: { enabled: true, conflictAction: 'uniquify', preferSource: 'page' },
     })`,
   );
+  const shownAtOnce = await waitFor(() => evaluate(optionsTab, ruleListed), 10_000);
+  check('The settings page shows a rule saved elsewhere', shownAtOnce, shownAtOnce ? '' : await describeSettingsPage());
   await send('browsingContext.navigate', { context: pageTab, url: `${site}/page`, wait: 'complete' });
 
   for (const { name, link, sorted, stays, first = sorted } of CASES) {
@@ -353,13 +378,16 @@ try {
   await privileged(`Services.prefs.setBoolPref('browser.download.useDownloadDir', true)`);
   await noHelpersLeft('Browse… with “Always ask where to save files”: nothing is left');
 
-  await evaluate(optionsTab, `document.querySelector('[data-action="edit"]').click()`);
-  mkdirSync(join(downloadsDir, 'Edited'));
-  await answer({ saveIn: join(downloadsDir, 'Edited') });
-  result = await browse(optionsTab, '[data-action="browse"]', 'edit-folder-test', 'edit-folder-hint-test');
-  await evaluate(optionsTab, `document.querySelector('.rule-edit button[type="submit"]').click()`);
-  const saved = await waitFor(async () => (await evaluate(optionsTab, `chrome.storage.local.get('rules').then(({ rules }) => rules[0].folder)`)) === 'Edited', 5000);
-  check('Browse… while editing a rule fills its field, and saving keeps the folder', result.value === 'Edited' && saved, JSON.stringify(result));
+  const stillListed = await evaluate(optionsTab, ruleListed);
+  if (check('The settings page still lists the rule after choosing folders', stillListed, stillListed ? '' : await describeSettingsPage())) {
+    await evaluate(optionsTab, `document.querySelector('[data-rule-id="test"] [data-action="edit"]').click()`);
+    mkdirSync(join(downloadsDir, 'Edited'));
+    await answer({ saveIn: join(downloadsDir, 'Edited') });
+    result = await browse(optionsTab, '[data-action="browse"]', 'edit-folder-test', 'edit-folder-hint-test');
+    await evaluate(optionsTab, `document.querySelector('.rule-edit button[type="submit"]').click()`);
+    const saved = await waitFor(async () => (await evaluate(optionsTab, `chrome.storage.local.get('rules').then(({ rules }) => rules[0].folder)`)) === 'Edited', 5000);
+    check('Browse… while editing a rule fills its field, and saving keeps the folder', result.value === 'Edited' && saved, JSON.stringify(result));
+  }
 
   // The popup's Browse… button opens the settings page with its form in the address.
   await answer({ saveIn: join(downloadsDir, 'Picked', 'Sub') });
