@@ -10,7 +10,7 @@
 // Firefox can unload the background page between events, so the downloads
 // being sorted are kept in storage.session rather than in variables.
 
-import { resolveDownload } from './rules.js';
+import { checkFirefoxName, resolveDownload } from './rules.js';
 
 const JOBS_KEY = 'redownloads';
 
@@ -27,6 +27,7 @@ const SKIP_EXPLANATIONS = {
   'not-repeatable': "a file that a page created itself can't be downloaded again",
   container: "downloads in container tabs aren't downloaded again",
   'unsafe-filename': "its name can't be used inside a folder",
+  'unsafe-folder': "Firefox would change the name of the rule's folder",
 };
 
 /**
@@ -43,8 +44,13 @@ export function planRedownload(item, rules, settings) {
   // A blob: address only works inside the page that created it.
   if (!/^(?:https?|data):/i.test(item.url ?? '')) return skip('not-repeatable');
   if (item.cookieStoreId && !DEFAULT_COOKIE_STORES.has(item.cookieStoreId)) return skip('container');
-  // Firefox replaces "%" in the names extensions give it, which would rename the file.
-  if (decision.filename.slice(decision.filename.lastIndexOf('/') + 1).includes('%')) return skip('unsafe-filename');
+  // Firefox changes "%" to "_" in the paths extensions give it, which would
+  // rename the file or put it into another folder, and refuses paths with some
+  // space characters or names ending in ".desktop". Rules made with versions
+  // before 0.2.1 can have such folders.
+  const parts = decision.filename.split('/');
+  if (checkFirefoxName(parts.pop())) return skip('unsafe-filename');
+  if (parts.some((part) => checkFirefoxName(part))) return skip('unsafe-folder');
   // Firefox can't ask where to save a file that an extension downloads.
   const conflictAction = decision.conflictAction === 'prompt' ? 'uniquify' : decision.conflictAction;
   return { ...decision, conflictAction };

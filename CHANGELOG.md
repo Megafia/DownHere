@@ -2,6 +2,19 @@
 
 All notable changes to DownHere are listed here. Version numbers follow [Semantic Versioning](https://semver.org/).
 
+## 0.2.1 – Unreleased
+
+- Firefox: a rule whose folder name contains `%` no longer saves files in a folder with `_` instead. Firefox changes
+  `%` to `_`, so such files now stay in the Downloads folder.
+- Firefox: rules whose folder name contains a special space (such as a no-break space) or ends in `.desktop` are now
+  explained. Firefox refuses such folders, so their files stayed in the Downloads folder without a word.
+- New rules can’t use such folder names any more. Existing rules keep them, also when restored from a backup, keep
+  working in Chrome, and can still be edited; in Firefox, the popup, the settings page, the download checker and the
+  message after saving say that their files stay in the usual download folder.
+- Folder suggestions only offer folders that new rules can use.
+- The release workflow uses versions of GitHub’s checkout and Node.js actions that no longer run on the retired
+  Node.js 20.
+
 ## 0.2.0 – 2026-09-24
 
 First release.

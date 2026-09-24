@@ -1,6 +1,7 @@
 import {
   DEFAULT_SETTINGS,
   addRule,
+  checkFirefoxFolder,
   createBackup,
   displayFolder,
   editRule,
@@ -20,6 +21,7 @@ import {
   BROWSER,
   describeSavedRule,
   fillFolderSuggestions,
+  firefoxFolderWarning,
   h,
   setFieldError,
   showBrowserSpecific,
@@ -171,6 +173,7 @@ function ruleRow(rule) {
         rule.enabled ? null : h('span', { className: 'tag tag-off' }, 'off'),
       ),
       h('p', { className: 'rule-folder' }, displayFolder(rule.folder)),
+      warningLine(firefoxFolderWarning(rule.folder)),
     ),
     h(
       'div',
@@ -197,6 +200,10 @@ function ruleRow(rule) {
       ),
     ),
   );
+}
+
+function warningLine(text) {
+  return text ? h('p', { className: 'hint is-error' }, text) : null;
 }
 
 function editRow(rule) {
@@ -232,7 +239,7 @@ function editRow(rule) {
     dataset: { focusKey: `edit-folder:${rule.id}` },
   });
   const folderHint = h('p', { className: 'hint', id: ids.folderHint });
-  updateFolderHint(folderInput, folderHint);
+  updateFolderHint(folderInput, folderHint, rule.folder);
   setFieldError(domainInput, domainError, editing.errors.domain);
   if (editing.errors.folder) showFolderError(folderInput, folderHint, editing.errors.folder);
 
@@ -316,7 +323,8 @@ function setUpRuleList() {
     if (input.name === 'domain') {
       setFieldError(input, document.getElementById(`edit-domain-error-${editing.id}`), '');
     } else {
-      updateFolderHint(input, document.getElementById(`edit-folder-hint-${editing.id}`));
+      const rule = state.rules.find((candidate) => candidate.id === editing.id);
+      updateFolderHint(input, document.getElementById(`edit-folder-hint-${editing.id}`), rule?.folder);
     }
   });
 
@@ -540,6 +548,15 @@ function setUpTester() {
         'Firefox can’t download files that a page created itself (blob: addresses) a second time, so this file ' +
           'would stay in your usual download folder.',
         'neutral',
+      );
+      return;
+    }
+    const problem = match && BROWSER === 'firefox' ? checkFirefoxFolder(match.rule.folder) : '';
+    if (problem) {
+      show(
+        `The rule for ${match.rule.domain} matches, but Firefox would change the name of its folder, so this file ` +
+          `would stay in your usual download folder. ${problem}`,
+        'error',
       );
       return;
     }
