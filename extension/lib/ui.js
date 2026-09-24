@@ -1,6 +1,6 @@
 // Small DOM helpers shared by the popup and the options page.
 
-import { checkFirefoxFolder, displayFolder, normalizeRuleFolder } from './rules.js';
+import { checkFirefoxFolder, displayFolder, normalizeRuleFolder, suggestedFolders } from './rules.js';
 
 const PROPERTIES = new Set(['checked', 'disabled', 'hidden']);
 
@@ -83,17 +83,17 @@ export function showFolderError(input, hint, message) {
  * It only promises a folder when the rule will actually be used.
  */
 export function describeSavedRule(verb, rule, settings) {
+  // Switching things on doesn't help such a rule in Firefox.
+  const warning = firefoxFolderWarning(rule.folder);
+  if (warning) return `${verb}. ${warning}`;
   if (!settings.enabled) {
     return `${verb}. DownHere is paused, so the rule for ${rule.domain} isn’t used until you switch DownHere back on.`;
   }
   if (!rule.enabled) return `${verb}. The rule for ${rule.domain} is switched off.`;
-  const warning = firefoxFolderWarning(rule.folder);
-  if (warning) return `${verb}. ${warning}`;
   return `${verb}. Downloads from ${rule.domain} will be saved in ${displayFolder(rule.folder)}.`;
 }
 
-/** Fills a <datalist> with the folders already used by rules. */
+/** Fills a <datalist> with the folders of rules that new rules can use too. */
 export function fillFolderSuggestions(datalist, rules) {
-  const folders = [...new Set(rules.map((rule) => rule.folder))].sort((a, b) => a.localeCompare(b));
-  datalist.replaceChildren(...folders.map((folder) => h('option', { value: folder })));
+  datalist.replaceChildren(...suggestedFolders(rules).map((folder) => h('option', { value: folder })));
 }

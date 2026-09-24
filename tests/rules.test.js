@@ -30,6 +30,7 @@ import {
   sanitizeSettings,
   setRuleEnabled,
   sortRules,
+  suggestedFolders,
   toWebAddress,
   validateRuleInput,
 } from '../extension/lib/rules.js';
@@ -341,6 +342,11 @@ describe('normalizeFolder', () => {
     assert.equal(checkFirefoxFolder('Work/Invoices'), '');
     assert.match(checkFirefoxFolder('Work/100% Done/Sub'), /can’t contain %/);
     assert.match(checkFirefoxFolder('Links.desktop/Sub'), /“\.desktop”/);
+  });
+
+  it('only suggests folders that new rules can use', () => {
+    const rules = ['Work', '100% Done', 'Art', 'Work', 'Links.desktop'].map((folder) => ({ folder }));
+    assert.deepEqual(suggestedFolders(rules), ['Art', 'Work']);
   });
 
   it('lets a rule keep its folder that only Firefox can’t use, but not change to another one', () => {

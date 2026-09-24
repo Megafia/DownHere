@@ -340,6 +340,12 @@ export function normalizeRuleFolder(input, current) {
   return kept.ok && kept.folder === current ? kept : result;
 }
 
+/** The folders of rules that new rules can use too, sorted and without repeats. */
+export function suggestedFolders(rules) {
+  const folders = rules.map((rule) => rule.folder).filter((folder) => normalizeFolder(folder).ok);
+  return [...new Set(folders)].sort((a, b) => a.localeCompare(b));
+}
+
 /** How a folder is shown to people: "Downloads/Work/Invoices". */
 export function displayFolder(folder) {
   return folder ? `Downloads/${folder}` : 'Downloads';
