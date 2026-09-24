@@ -2,6 +2,7 @@
 // names the file. Firefox can't, so there DownHere downloads the file again
 // into the rule's folder instead (see lib/redownload.js).
 
+import { helperFileName, isHelperDownload } from './lib/folder-picker.js';
 import { createRedownloader } from './lib/redownload.js';
 import { isRoutingActive, resolveDownload } from './lib/rules.js';
 import { loadState } from './lib/storage.js';
@@ -63,6 +64,13 @@ function onDeterminingFilename(item, suggest) {
 
 /** Returns the suggestion for Chrome, or null to leave the download alone. */
 async function chooseLocation(item) {
+  // The small files the settings page saves to find out which folder someone
+  // chose (see lib/folder-picker.js). Chrome drops the name DownHere gave them
+  // unless DownHere repeats it here.
+  if (isHelperDownload(item, { extensionId: chrome.runtime.id, extensionUrl: chrome.runtime.getURL('') })) {
+    const filename = await helperFileName(chrome.storage.session, item.url);
+    return filename ? { filename, conflictAction: 'uniquify' } : null;
+  }
   const { rules, settings } = await loadState();
   const decision = resolveDownload(item, rules, settings);
   if (decision.action === 'route') {

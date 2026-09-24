@@ -15,6 +15,8 @@ and every download from those sites lands in the right folder without a Save As 
 - **A folder for each website.** Rules like `github.com → Code/GitHub`, including nested folders, which are created
   automatically.
 - **Set up in seconds.** Open a site, click the DownHere button, type a folder name, save.
+- **Or choose the folder in a dialog.** Click **Browse…** to pick or create the folder in your browser’s own save
+  dialog instead of typing its name.
 - **Subdomains included if you want them.** One rule for `google.com` can cover `drive.google.com` and
   `mail.google.com`, or you can give each its own folder. When several rules fit, the most specific one wins.
 - **Understands where a download really comes from.** Rules match the page you downloaded from as well as the file’s
@@ -64,13 +66,35 @@ DownHere needs Firefox 140 or newer. See [In Firefox](#in-firefox) for how it wo
 
 ## How to use it
 
-**From the toolbar:** open any website, click the DownHere button, type a folder name and click **Save**. From then on,
-files you download from that site are saved in that folder inside your Downloads folder. Use `/` for subfolders, for
-example `Work/Invoices`.
+**From the toolbar:** open any website, click the DownHere button, type a folder name (or click **Browse…** to choose
+it in a dialog) and click **Save**. From then on, files you download from that site are saved in that folder inside
+your Downloads folder. Use `/` for subfolders, for example `Work/Invoices`.
 
 **On the settings page** (click **All rules and settings** in the popup, or in Chrome right-click the DownHere button
 and choose **Options**) you can add, edit, switch off and delete rules, change settings, check where a download will
 go, and back up your rules.
+
+### Choosing a folder with Browse…
+
+**Browse…** opens your browser’s save dialog, suggesting a file named `DownHere - choose this folder.txt`. Open the
+folder you want, or create a new one, and click **Save**. DownHere fills in the folder, which you can still change
+before you save the rule.
+
+Browsers don’t tell extensions where a folder chosen in a folder dialog is, but they do tell them where a download was
+saved. So DownHere really saves that small file, and then a second one, `DownHere - Downloads folder check.txt`,
+without a dialog, which the browser puts directly in your Downloads folder. The two paths show which folder inside the
+Downloads folder you chose. DownHere deletes both files right away and removes them from the downloads list, so you
+may only see them there for a moment.
+
+- The folder has to be inside your Downloads folder, because browsers only let extensions save files there. DownHere
+  tells you when you choose a folder somewhere else, or the Downloads folder itself.
+- The popup closes as soon as a dialog opens, so its **Browse…** button opens the settings page with what you entered
+  and shows the dialog there.
+- If Chrome is set to ask where to save each file, it also asks about the second file. Click **Save** without changing
+  the folder.
+- Chrome opens the dialog in your Downloads folder, Firefox in the folder you chose last time.
+- If a DownHere page is closed while its save dialog is open, the small file can stay where you saved it. DownHere
+  deletes it the next time you use **Browse…**, or you can delete it yourself.
 
 ## How rules are matched
 
@@ -130,7 +154,8 @@ go, and back up your rules.
   Chrome lets only one of them decide while both are active: the one installed or updated most recently, even for
   downloads it doesn’t change. If DownHere stops sorting your files, check for such an extension.
 - On Linux, folder names with non-English characters need a UTF-8 system locale (the default on current
-  distributions); otherwise Chrome saves the files in the Downloads folder instead.
+  distributions); otherwise Chrome saves the files in the Downloads folder instead, and **Browse…** can’t tell which
+  folder you chose.
 
 ### In Firefox
 
@@ -161,8 +186,8 @@ second time from the address it came from, as described above.
 
 | Permission | Why it’s needed |
 | --- | --- |
-| `downloads` | Chrome: to choose the folder while Chrome is naming a download (shown as “Manage your downloads”). Firefox: to download a file again into its folder and remove the first copy (shown as “Download files and read and modify the browser’s download history”). |
-| `storage` | To keep your rules and settings, and in Firefox the downloads being sorted. |
+| `downloads` | Chrome: to choose the folder while Chrome is naming a download (shown as “Manage your downloads”). Firefox: to download a file again into its folder and remove the first copy (shown as “Download files and read and modify the browser’s download history”). In both, to save and delete the two small files of **Browse…**. |
+| `storage` | To keep your rules and settings, in Firefox the downloads being sorted, and in Chrome the names of the small files of **Browse…** while they are saved. |
 | `activeTab` | To read the address of the current tab, only when you click the DownHere button, so the popup can fill in the website. |
 
 ## Development
@@ -172,6 +197,7 @@ is only needed for the tests and for packaging.
 
 ```sh
 npm test               # run the unit tests
+npm run test:chrome    # try DownHere in a real Chrome (needs Chrome 121 or newer)
 npm run test:firefox   # try DownHere in a real Firefox (needs Firefox 140 or newer)
 npm run package        # create dist/downhere-<version>-chrome.zip and dist/downhere-<version>-firefox.zip
 ```
@@ -181,41 +207,45 @@ about the keys only Firefox uses; the packaged ZIPs leave out the other browser�
 files in `extension/`, click the reload button on DownHere’s card in `chrome://extensions`, or **Reload** next to
 DownHere in Firefox’s `about:debugging#/runtime/this-firefox`.
 
-`npm run test:firefox` starts Firefox without a window and with a new, empty profile, so your own Firefox isn’t
-touched. Set `FIREFOX` to the Firefox program if it isn’t found.
+`npm run test:chrome` and `npm run test:firefox` start the browser without a window and with a new, empty profile, so
+your own browser isn’t touched. They download files from a small website on your computer and try **Browse…**. Set
+`CHROME` or `FIREFOX` to the browser program if it isn’t found. Without a window, Chrome closes every save dialog right
+away, so the Chrome test tries **Browse…** with a closed dialog; the Firefox test answers Firefox’s save dialog with a
+stand-in.
 
 ```text
 extension/
-  manifest.json      Extension manifest (Manifest V3, for Chrome and Firefox)
-  background.js      Background script: picks the folder for each download
-  lib/rules.js       Rule matching and Chrome's path rules (no browser APIs, unit tested)
-  lib/redownload.js  Firefox: downloads a file again into its folder (unit tested)
-  lib/storage.js     Reading and saving rules and settings
-  lib/ui.js          Shared helpers for the popup and settings page
-  popup/             Toolbar popup
-  options/           Settings page
-  styles/            Shared styles
-  icons/             Extension icons
-assets/icon.svg      Source of the icons
-docs/screenshots/    Images used in this README
-scripts/             Packaging (package.mjs, manifests.mjs) and the Firefox test (firefox-test.mjs)
-tests/               Unit tests (Node's built-in test runner)
-.github/workflows/   Adds the built ZIPs to each GitHub release
+  manifest.json         Extension manifest (Manifest V3, for Chrome and Firefox)
+  background.js         Background script: picks the folder for each download
+  lib/rules.js          Rule matching and Chrome's path rules (no browser APIs, unit tested)
+  lib/redownload.js     Firefox: downloads a file again into its folder (unit tested)
+  lib/folder-picker.js  Browse…: works out the folder chosen in the save dialog (unit tested)
+  lib/storage.js        Reading and saving rules and settings
+  lib/ui.js             Shared helpers for the popup and settings page
+  popup/                Toolbar popup
+  options/              Settings page
+  styles/               Shared styles
+  icons/                Extension icons
+assets/icon.svg         Source of the icons
+docs/screenshots/       Images used in this README
+scripts/                Packaging (package.mjs, manifests.mjs) and the browser tests (browser-tests/)
+tests/                  Unit tests (Node's built-in test runner)
+.github/workflows/      Adds the built ZIPs to each GitHub release
 ```
 
 ### Releasing a new version
 
 1. Update `version` in both `extension/manifest.json` and `package.json`, and describe the changes in
-   [CHANGELOG.md](CHANGELOG.md) under a heading like `## 0.2.0 – 2026-10-01`. Commit the changes to `main`.
+   [CHANGELOG.md](CHANGELOG.md) under a heading like `## 0.3.0 – 2026-10-01`. Commit the changes to `main`.
 2. Publish a release for the tag `v` + the version, either on GitHub (**Releases** › **Draft a new release**, type
-   `v0.2.0` as a new tag on `main`, then **Publish release**) or from the command line:
+   `v0.3.0` as a new tag on `main`, then **Publish release**) or from the command line:
 
    ```sh
-   git tag -a v0.2.0 -m "DownHere 0.2.0"
-   git push origin v0.2.0
+   git tag -a v0.3.0 -m "DownHere 0.3.0"
+   git push origin v0.3.0
    ```
 
-3. The **Release** workflow then runs the tests, builds `downhere-0.2.0-chrome.zip` and `downhere-0.2.0-firefox.zip`
+3. The **Release** workflow then runs the tests, builds `downhere-0.3.0-chrome.zip` and `downhere-0.3.0-firefox.zip`
    and attaches them to the release (it creates the release if you only pushed a tag). If the release has no
    description, it uses the notes from the changelog. It stops with an error if the tag doesn’t match the version in
    both files.

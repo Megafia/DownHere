@@ -236,4 +236,18 @@ function setUpControls() {
     await chrome.runtime.openOptionsPage();
     window.close();
   });
+
+  // The popup would close as soon as a save dialog opens, so the settings page
+  // takes over the form and opens the dialog (see options.js).
+  $('browse').addEventListener('click', async () => {
+    const form = new URLSearchParams({
+      browse: '1',
+      domain: domain.value,
+      folder: folder.value,
+      subdomains: $('subdomains').checked ? '1' : '0',
+    });
+    if (formRuleId) form.set('rule', formRuleId);
+    await chrome.tabs.create({ url: `${chrome.runtime.getURL('options/options.html')}#${form}` });
+    window.close();
+  });
 }

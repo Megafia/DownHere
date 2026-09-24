@@ -41,8 +41,12 @@
           </div>
           <div class="field">
             <label class="label" for="add-folder">Folder</label>
-            <input class="input" id="add-folder" name="folder" type="text" placeholder="Example"
-              list="folder-suggestions" autocomplete="off" spellcheck="false" aria-describedby="add-folder-hint">
+            <div class="folder-row">
+              <input class="input" id="add-folder" name="folder" type="text" placeholder="Example"
+                list="folder-suggestions" autocomplete="off" spellcheck="false" aria-describedby="add-folder-hint">
+              <button class="btn" type="button" id="add-browse" data-browse aria-describedby="add-folder-hint"
+                title="Choose the folder in your browser’s save dialog">Browse…</button>
+            </div>
             <p class="hint" id="add-folder-hint"></p>
           </div>
           <div class="form-footer">
@@ -152,6 +156,12 @@
             General › Files and Applications). DownHere creates the folders you choose there automatically.
           </li>
           <li>
+            Browse… opens your browser’s save dialog, because a folder dialog wouldn’t tell DownHere where the folder
+            is. Open the folder you want, or create one, and click Save. DownHere saves a small file there and a
+            second one directly in your Downloads folder, works out which folder you chose, and deletes both files
+            right away.
+          </li>
+          <li>
             A rule for example.com also covers www.example.com. Switch on “Include subdomains” to cover addresses
             such as files.example.com too. When several rules fit the same address, the most specific one wins.
           </li>
@@ -163,7 +173,11 @@
             DownHere only chooses the folder; files keep the name Firefox gives them. Files with % in their name (which
             Firefox would change) and a few unusual names such as CON.txt stay in the Downloads folder.
           </li>
-          <li data-browser="chrome">If Chrome is set to ask where to save each file, the save dialog suggests the rule’s folder.</li>
+          <li data-browser="chrome">
+            If Chrome is set to ask where to save each file, the save dialog suggests the rule’s folder. After Browse…,
+            Chrome then also asks about DownHere’s second small file, “DownHere - Downloads folder check.txt”: click
+            Save without changing the folder.
+          </li>
           <li data-browser="chrome">
             Rules only apply in Incognito windows if you allow DownHere in Incognito (chrome://extensions ›
             DownHere › Details).

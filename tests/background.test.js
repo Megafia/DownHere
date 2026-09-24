@@ -33,6 +33,8 @@ function fakeBrowser({ firefox }) {
       onChanged: event('storage.onChanged'),
     },
     runtime: {
+      id: 'downhere-id',
+      getURL: (path) => `chrome-extension://downhere-id/${path}`,
       OnInstalledReason: { INSTALL: 'install', UPDATE: 'update' },
       onInstalled: event('runtime.onInstalled'),
       openOptionsPage: async () => openedOptions.push(true),
@@ -66,6 +68,26 @@ describe('background.js', () => {
       assert.equal(listener({ url: 'https://example.com/report.pdf', referrer: '', filename: 'report.pdf' }, resolve), true);
     });
     assert.deepEqual(suggestion, { filename: 'Example/report.pdf', conflictAction: 'uniquify' });
+  });
+
+  it('gives DownHere’s own helper files the names it chose (Chrome)', async () => {
+    const { chrome, listeners } = await startBackground('chrome');
+    const [listener] = listeners.get('downloads.onDeterminingFilename');
+    const ask = (item) =>
+      new Promise((resolve) => {
+        assert.equal(listener({ referrer: '', filename: '1234.txt', ...item }, (...args) => resolve(args)), true);
+      });
+    const url = 'blob:chrome-extension://downhere-id/1234';
+    await chrome.storage.session.set({ helperFile: { url, name: 'DownHere - choose this folder.txt' } });
+    assert.deepEqual(await ask({ url, byExtensionId: 'downhere-id' }), [
+      { filename: 'DownHere - choose this folder.txt', conflictAction: 'uniquify' },
+    ]);
+    // Another download of DownHere's, or a stored name for another file: no change.
+    assert.deepEqual(await ask({ url: 'blob:chrome-extension://downhere-id/5678', byExtensionId: 'downhere-id' }), []);
+    // Other extensions' downloads are sorted by the rules as usual.
+    assert.deepEqual(await ask({ url: 'https://example.com/a.pdf', byExtensionId: 'someone-else', filename: 'a.pdf' }), [
+      { filename: 'Example/a.pdf', conflictAction: 'uniquify' },
+    ]);
   });
 
   it('downloads files again in Firefox', async () => {

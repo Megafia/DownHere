@@ -1,3 +1,4 @@
+import { CHECK_FILE_NAME, chooseFolder, folderChoiceMessage } from '../lib/folder-picker.js';
 import {
   DEFAULT_SETTINGS,
   addRule,
@@ -33,13 +34,25 @@ const $ = (id) => document.getElementById(id);
 
 let state = { rules: [], settings: { ...DEFAULT_SETTINGS } };
 // The rule being edited in place, with the values typed so far:
-// {id, domain, folder, includeSubdomains, errors, saving}.
+// {id, domain, folder, includeSubdomains, errors, folderMessage, saving}.
 let editing = null;
 let refreshCount = 0;
 // Set while a delete or an undo is being saved, so they can't overlap.
 let busy = false;
 // Rules deleted while the current "Undo" message is showing: [{rule, index}].
 let undoStack = [];
+// What a folder is being chosen for in the save dialog: 'add' for the add
+// form, the id of the rule being edited, or null.
+let picking = null;
+// Resolves once the stored rules have been shown for the first time.
+let firstRenderDone;
+const firstRender = new Promise((resolve) => {
+  firstRenderDone = resolve;
+});
+
+// The popup's Browse… button opens this page with the popup's form in the
+// address, to choose the folder here: a popup closes when a dialog opens.
+const fromPopup = readPopupForm();
 
 showBrowserSpecific();
 setUpAddForm();
@@ -50,6 +63,7 @@ setUpBackup();
 setUpToast();
 watchState(refresh);
 refresh();
+if (fromPopup) firstRender.then(() => continueFromPopup(fromPopup));
 
 async function refresh() {
   // Ignore results that arrive after a newer refresh has started.
@@ -64,6 +78,7 @@ function render() {
   renderSettings();
   renderRules();
   fillFolderSuggestions($('folder-suggestions'), state.rules);
+  firstRenderDone();
 }
 
 function applyRules(rules) {
@@ -84,6 +99,7 @@ function setUpAddForm() {
 
   domain.addEventListener('input', () => setFieldError(domain, $('add-domain-error'), ''));
   folder.addEventListener('input', () => updateFolderHint(folder, folderHint));
+  $('add-browse').addEventListener('click', () => browseForFolder('add'));
 
   let adding = false;
   form.addEventListener('submit', async (event) => {
@@ -234,7 +250,21 @@ function editRow(rule) {
   const folderHint = h('p', { className: 'hint', id: ids.folderHint });
   updateFolderHint(folderInput, folderHint);
   setFieldError(domainInput, domainError, editing.errors.domain);
-  if (editing.errors.folder) showFolderError(folderInput, folderHint, editing.errors.folder);
+  // A message from choosing a folder is newer than an error from saving.
+  if (editing.folderMessage) showFolderMessage(folderHint, editing.folderMessage);
+  else if (editing.errors.folder) showFolderError(folderInput, folderHint, editing.errors.folder);
+  const browseButton = h(
+    'button',
+    {
+      className: 'btn',
+      type: 'button',
+      disabled: picking !== null,
+      title: 'Choose the folder in your browser’s save dialog',
+      'aria-describedby': ids.folderHint,
+      dataset: { action: 'browse', browse: '', focusKey: `edit-browse:${rule.id}` },
+    },
+    'Browse…',
+  );
 
   const form = h(
     'form',
@@ -250,7 +280,7 @@ function editRow(rule) {
       'div',
       { className: 'field' },
       h('label', { className: 'label', for: ids.folder }, 'Folder'),
-      folderInput,
+      h('div', { className: 'folder-row' }, folderInput, browseButton),
       folderHint,
     ),
     h(
@@ -297,6 +327,7 @@ function setUpRuleList() {
     // A click with detail 0 comes from the keyboard (Enter or Space).
     else if (action === 'delete') deleteRule(id, { fromKeyboard: event.detail === 0 });
     else if (action === 'cancel') stopEditing(id);
+    else if (action === 'browse') browseForFolder(id);
   });
 
   list.addEventListener('change', (event) => {
@@ -316,6 +347,7 @@ function setUpRuleList() {
     if (input.name === 'domain') {
       setFieldError(input, document.getElementById(`edit-domain-error-${editing.id}`), '');
     } else {
+      editing.folderMessage = null;
       updateFolderHint(input, document.getElementById(`edit-folder-hint-${editing.id}`));
     }
   });
@@ -342,6 +374,7 @@ function startEditing(id) {
     folder: rule.folder,
     includeSubdomains: rule.includeSubdomains,
     errors: {},
+    folderMessage: null,
   };
   renderRules();
   document.getElementById(`edit-folder-${id}`)?.focus();
@@ -369,6 +402,7 @@ async function saveEdit(id) {
     }
     if (editing !== draft) return;
     editing.errors = result.errors;
+    editing.folderMessage = null;
     renderRules();
     document.getElementById(result.errors.domain ? `edit-domain-${id}` : `edit-folder-${id}`)?.focus();
     return;
@@ -470,6 +504,131 @@ async function restoreDeleted(deleted) {
   }
   if (restored.length === 0 || !focusRuleButton('edit', restored[restored.length - 1].id)) $('rules-title').focus();
   showToast(parts.join(' '));
+}
+
+// ---------------------------------------------------------------------------
+// Choosing a folder in the browser's save dialog
+// ---------------------------------------------------------------------------
+
+function folderPickerApi() {
+  return {
+    downloads: chrome.downloads,
+    storage: chrome.storage.session,
+    locks: navigator.locks,
+    extensionId: chrome.runtime.id,
+    extensionUrl: chrome.runtime.getURL(''),
+  };
+}
+
+function showFolderMessage(hint, { text, isError = false }) {
+  hint.textContent = text;
+  hint.classList.toggle('is-error', isError);
+}
+
+// Shows a message under the folder field of the add form ('add') or of the
+// rule being edited (its id).
+function setFolderMessage(target, message) {
+  if (target === 'add') {
+    showFolderMessage($('add-folder-hint'), message);
+  } else if (editing?.id === target) {
+    editing.folderMessage = message;
+    const hint = document.getElementById(`edit-folder-hint-${target}`);
+    if (hint) showFolderMessage(hint, message);
+  }
+}
+
+function setBrowseButtonsEnabled(enabled) {
+  for (const button of document.querySelectorAll('[data-browse]')) button.disabled = !enabled;
+}
+
+/**
+ * Lets the person choose the folder for the add form ('add') or for the rule
+ * being edited (its id) in the browser's save dialog.
+ */
+async function browseForFolder(target) {
+  if (picking !== null) return;
+  picking = target;
+  setBrowseButtonsEnabled(false);
+  setFolderMessage(target, { text: 'In the save dialog, open the folder you want and click Save.' });
+  let slowCheck;
+  let result;
+  try {
+    result = await chooseFolder(folderPickerApi(), {
+      onProgress: (step) => {
+        if (step !== 'checking') return;
+        // Saving the second file only takes this long when the browser asks
+        // where to save it.
+        slowCheck = setTimeout(() => {
+          setFolderMessage(target, {
+            text: `Your browser is asking where to save “${CHECK_FILE_NAME}”. Click Save without changing the folder.`,
+          });
+        }, 1000);
+      },
+    });
+  } catch (error) {
+    result = { outcome: 'failed', error: error instanceof Error ? error.message : String(error) };
+  } finally {
+    clearTimeout(slowCheck);
+    picking = null;
+    setBrowseButtonsEnabled(true);
+  }
+  showFolderChoice(target, result);
+}
+
+// Puts the chosen folder into the field, or says why no folder was chosen.
+function showFolderChoice(target, result) {
+  const message = folderChoiceMessage(result);
+  const chosen = result.outcome === 'chosen';
+  if (target === 'add') {
+    const folder = $('add-folder');
+    const hint = $('add-folder-hint');
+    if (chosen) folder.value = result.folder;
+    updateFolderHint(folder, hint);
+    if (message) showFolderMessage(hint, { text: message, isError: true });
+    (chosen ? folder : $('add-browse')).focus();
+    return;
+  }
+  // The rule may have been deleted in another tab meanwhile.
+  if (editing?.id !== target) return;
+  if (chosen) {
+    editing.folder = result.folder;
+    editing.errors.folder = undefined;
+  }
+  editing.folderMessage = message ? { text: message, isError: true } : null;
+  renderRules();
+  const focusKey = chosen ? `edit-folder:${target}` : `edit-browse:${target}`;
+  $('rule-list').querySelector(`[data-focus-key="${CSS.escape(focusKey)}"]`)?.focus();
+}
+
+/** Reads the popup's form from this page's address and removes it from there. */
+function readPopupForm() {
+  const params = new URLSearchParams(location.hash.slice(1));
+  if (params.get('browse') !== '1') return null;
+  // Reloading the page mustn't open the save dialog again.
+  history.replaceState(null, '', location.pathname + location.search);
+  return {
+    ruleId: params.get('rule'),
+    domain: params.get('domain') ?? '',
+    folder: params.get('folder') ?? '',
+    includeSubdomains: params.get('subdomains') !== '0',
+  };
+}
+
+// Fills in the popup's form here and opens the save dialog for its folder.
+function continueFromPopup({ ruleId, ...values }) {
+  if (ruleId && state.rules.some((rule) => rule.id === ruleId)) {
+    startEditing(ruleId);
+    Object.assign(editing, values);
+    renderRules();
+    document.getElementById(`edit-folder-${ruleId}`)?.scrollIntoView({ block: 'center' });
+    browseForFolder(ruleId);
+    return;
+  }
+  $('add-domain').value = values.domain;
+  $('add-folder').value = values.folder;
+  $('add-form').elements.includeSubdomains.checked = values.includeSubdomains;
+  updateFolderHint($('add-folder'), $('add-folder-hint'));
+  browseForFolder('add');
 }
 
 // ---------------------------------------------------------------------------

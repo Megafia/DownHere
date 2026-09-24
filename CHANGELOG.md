@@ -2,6 +2,18 @@
 
 All notable changes to DownHere are listed here. Version numbers follow [Semantic Versioning](https://semver.org/).
 
+## 0.3.0 – 2026-09-24
+
+- Choose a rule’s folder in your browser’s own save dialog: click **Browse…** next to a folder field on the settings
+  page or in the popup, open the folder you want (or create one) and click Save. From the popup, this continues on the
+  settings page, because a popup closes as soon as a dialog opens. Browsers don’t tell extensions where a chosen folder
+  is, so DownHere saves a small file there and a second one directly in the Downloads folder, works out the folder from
+  the two, and deletes both files right away.
+- A folder outside the Downloads folder, the Downloads folder itself and folder names that rules can’t use are
+  explained instead of being filled in.
+- `npm run test:chrome` tries DownHere in a real Chrome, as `npm run test:firefox` does in Firefox, and both now try
+  Browse… too. `npm test` only runs the unit tests again and no longer starts Firefox.
+
 ## 0.2.0 – 2026-09-24
 
 First release.

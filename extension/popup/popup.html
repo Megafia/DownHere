@@ -35,9 +35,14 @@
       <form class="popup-form" id="rule-form" novalidate>
         <div class="field">
           <label class="label" for="folder">Save downloads in</label>
-          <input class="input" id="folder" name="folder" type="text" placeholder="Folder name"
-            list="folder-suggestions" autocomplete="off" spellcheck="false" aria-describedby="folder-hint">
+          <div class="folder-row">
+            <input class="input" id="folder" name="folder" type="text" placeholder="Folder name"
+              list="folder-suggestions" autocomplete="off" spellcheck="false" aria-describedby="folder-hint">
+            <button class="btn" type="button" id="browse" aria-describedby="browse-description"
+              title="Choose the folder in your browser’s save dialog, on the settings page">Browse…</button>
+          </div>
           <p class="hint" id="folder-hint"></p>
+          <p id="browse-description" hidden>Opens the settings page and your browser’s save dialog.</p>
         </div>
         <div class="field">
           <label class="label" for="domain">For the website</label>

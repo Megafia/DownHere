@@ -1,0 +1,34 @@
+name: Test
+
+# Runs the unit tests and tries DownHere in the Chrome and Firefox that come
+# with GitHub's Ubuntu runners.
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run the unit tests
+        run: npm test
+
+      - name: Try DownHere in Chrome
+        run: npm run test:chrome
+
+      - name: Try DownHere in Firefox
+        run: npm run test:firefox

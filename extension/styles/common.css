@@ -182,6 +182,27 @@ select {
   border-color: var(--danger);
 }
 
+/* A folder field with its Browse… button. */
+.folder-row {
+  display: flex;
+  gap: 8px;
+}
+
+.folder-row .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.folder-row .btn {
+  flex: none;
+}
+
+/* Also keeps hover styles off disabled buttons. */
+.btn:disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
 .hint {
   color: var(--text-muted);
   font-size: 13px;

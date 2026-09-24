@@ -1,13 +1,14 @@
 {
   "name": "downhere",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Chrome and Firefox extension that saves downloads from each website into a folder you choose.",
   "license": "MIT",
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "test:firefox": "node scripts/firefox-test.mjs",
+    "test:firefox": "node scripts/browser-tests/firefox.mjs",
+    "test:chrome": "node scripts/browser-tests/chrome.mjs",
     "package": "node scripts/package.mjs"
   },
   "engines": {
