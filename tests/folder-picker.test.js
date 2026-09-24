@@ -49,6 +49,22 @@ describe('folderFromSavedFiles', () => {
     }
   });
 
+  it('treats /private/tmp and /tmp as the same folder, as macOS does', () => {
+    const longCheck = `/private/tmp/me/Downloads/${CHECK_FILE_NAME}`;
+    assert.deepEqual(folderFromSavedFiles(chosen('/tmp/me/Downloads/Work/Invoices'), longCheck), {
+      outcome: 'chosen',
+      folder: 'Work/Invoices',
+    });
+    const shortCheck = `/var/folders/x/Downloads/${CHECK_FILE_NAME}`;
+    assert.deepEqual(folderFromSavedFiles(chosen('/private/var/folders/x/Downloads/Work'), shortCheck), {
+      outcome: 'chosen',
+      folder: 'Work',
+    });
+    // Other folders under /private have no second name.
+    const homeCheck = `/home/Downloads/${CHECK_FILE_NAME}`;
+    assert.equal(folderFromSavedFiles(chosen('/private/home/Downloads/Work'), homeCheck).outcome, 'outside');
+  });
+
   it('treats paths as case-sensitive outside Windows', () => {
     assert.equal(folderFromSavedFiles(chosen('/home/me/downloads/Work'), check).outcome, 'outside');
   });

@@ -109,8 +109,8 @@ export function folderFromSavedFiles(chosenPath, checkPath) {
       // skip the empty ones that repeated separators leave.
       .filter((part, index) => index === 0 || part !== '')
       .slice(0, -1);
-  const downloadsParts = directoryParts(checkPath);
-  const chosenParts = directoryParts(chosenPath);
+  const downloadsParts = directoryParts(windows ? checkPath : withoutPrivatePrefix(checkPath));
+  const chosenParts = directoryParts(windows ? chosenPath : withoutPrivatePrefix(chosenPath));
   // Windows ignores upper and lower case in paths.
   const same = windows ? (a, b) => a.toLowerCase() === b.toLowerCase() : (a, b) => a === b;
   const inside =
@@ -133,6 +133,13 @@ export function folderFromSavedFiles(chosenPath, checkPath) {
     return { outcome: 'invalid', error: normalized.ok ? 'Its name would change.' : normalized.error };
   }
   return { outcome: 'chosen', folder };
+}
+
+// macOS has two names for a few system folders: /tmp is also /private/tmp, and
+// the same goes for /var and /etc. Its save dialog reports the short name,
+// while the browser can report the Downloads folder with the long one.
+function withoutPrivatePrefix(path) {
+  return path.replace(/^\/private(?=\/(?:etc|tmp|var)(?:\/|$))/, '');
 }
 
 // The folder a file is in, as the operating system writes it.
