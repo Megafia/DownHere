@@ -146,8 +146,16 @@ That’s always the case for:
 - files you get by sending a form, and links that only work once;
 - downloads in container tabs, because downloading them again would send the wrong cookies;
 - files you choose a place for yourself, for example with **Always ask you where to save files**;
-- files with `%` in their name, which Firefox would rename, and the few names Chrome doesn’t accept either;
+- files with `%` or a special space in their name, which Firefox would change, and the few names Chrome doesn’t accept
+  either;
+- files for a rule made before 0.2.1 whose folder name has `%`, a special space (such as a no-break space) or ends in
+  `.desktop`, because Firefox would change the folder’s name. The popup and the settings page point these rules out;
+  new rules can’t have such names;
 - files that other extensions download.
+
+If your Downloads folder already has a file with the same name, Firefox numbers the new one, for example
+`report(1).pdf`, and the sorted file keeps that name, because DownHere can’t tell that number from one that belongs
+to the file’s real name.
 
 Rules only apply in private windows if DownHere may run there (`about:addons` › DownHere ›
 **Run in Private Windows**). If a file from a website with a rule wasn’t sorted and you’d like to know why, open

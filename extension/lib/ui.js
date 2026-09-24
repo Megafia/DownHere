@@ -1,6 +1,6 @@
 // Small DOM helpers shared by the popup and the options page.
 
-import { displayFolder, normalizeFolder } from './rules.js';
+import { checkFirefoxFolder, displayFolder, normalizeRuleFolder, suggestedFolders } from './rules.js';
 
 const PROPERTIES = new Set(['checked', 'disabled', 'hidden']);
 
@@ -42,9 +42,10 @@ export function setFieldError(input, errorElement, message) {
 
 /**
  * Updates the line under a folder input: where files will be saved, or what
- * is wrong with the name. Returns true if the folder is valid.
+ * is wrong with the name. `current` is the folder of the rule being edited,
+ * which it may keep. Returns true if the folder is valid.
  */
-export function updateFolderHint(input, hint) {
+export function updateFolderHint(input, hint, current) {
   const text = input.value.trim();
   if (text === '') {
     hint.textContent = 'A folder inside your Downloads folder. Use / for subfolders.';
@@ -52,11 +53,22 @@ export function updateFolderHint(input, hint) {
     input.removeAttribute('aria-invalid');
     return false;
   }
-  const result = normalizeFolder(text);
-  hint.textContent = result.ok ? `Saves to ${displayFolder(result.folder)}` : result.error;
-  hint.classList.toggle('is-error', !result.ok);
+  const result = normalizeRuleFolder(text, current);
+  const warning = result.ok ? firefoxFolderWarning(result.folder) : '';
+  hint.textContent = result.ok ? warning || `Saves to ${displayFolder(result.folder)}` : result.error;
+  hint.classList.toggle('is-error', !result.ok || warning !== '');
   if (result.ok) input.removeAttribute('aria-invalid');
   return result.ok;
+}
+
+/**
+ * In Firefox, explains why a rule with this folder isn't used, or returns "".
+ * Rules made with older versions can have folders that only Firefox can't use
+ * (see checkFolderName()).
+ */
+export function firefoxFolderWarning(folder) {
+  const problem = BROWSER === 'firefox' ? checkFirefoxFolder(folder) : '';
+  return problem ? `${problem} Until you choose another folder, downloads for this rule stay in your usual download folder.` : '';
 }
 
 /** Shows a folder error from a failed save and marks the input invalid. */
@@ -71,6 +83,9 @@ export function showFolderError(input, hint, message) {
  * It only promises a folder when the rule will actually be used.
  */
 export function describeSavedRule(verb, rule, settings) {
+  // Switching things on doesn't help such a rule in Firefox.
+  const warning = firefoxFolderWarning(rule.folder);
+  if (warning) return `${verb}. ${warning}`;
   if (!settings.enabled) {
     return `${verb}. DownHere is paused, so the rule for ${rule.domain} isn’t used until you switch DownHere back on.`;
   }
@@ -78,8 +93,7 @@ export function describeSavedRule(verb, rule, settings) {
   return `${verb}. Downloads from ${rule.domain} will be saved in ${displayFolder(rule.folder)}.`;
 }
 
-/** Fills a <datalist> with the folders already used by rules. */
+/** Fills a <datalist> with the folders of rules that new rules can use too. */
 export function fillFolderSuggestions(datalist, rules) {
-  const folders = [...new Set(rules.map((rule) => rule.folder))].sort((a, b) => a.localeCompare(b));
-  datalist.replaceChildren(...folders.map((folder) => h('option', { value: folder })));
+  datalist.replaceChildren(...suggestedFolders(rules).map((folder) => h('option', { value: folder })));
 }

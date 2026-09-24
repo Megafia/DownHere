@@ -1,6 +1,6 @@
 {
   "name": "downhere",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Chrome and Firefox extension that saves downloads from each website into a folder you choose.",
   "license": "MIT",

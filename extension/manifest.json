@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "DownHere",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Choose which folder downloads are saved to for each website.",
   "minimum_chrome_version": "121",
   "permissions": ["downloads", "storage", "activeTab"],
