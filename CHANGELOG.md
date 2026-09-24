@@ -2,7 +2,7 @@
 
 All notable changes to DownHere are listed here. Version numbers follow [Semantic Versioning](https://semver.org/).
 
-## 0.2.1 – Unreleased
+## 0.2.1 – 2026-09-24
 
 - Firefox: a rule whose folder name contains `%` no longer saves files in a folder with `_` instead. Firefox changes
   `%` to `_`, so such files now stay in the Downloads folder.
