@@ -230,7 +230,7 @@ assets/icon.svg         Source of the icons
 docs/screenshots/       Images used in this README
 scripts/                Packaging (package.mjs, manifests.mjs) and the browser tests (browser-tests/)
 tests/                  Unit tests (Node's built-in test runner)
-.github/workflows/      Adds the built ZIPs to each GitHub release
+.github/workflows/      Runs all tests on every push (test.yml) and adds the ZIPs to each release (release.yml)
 ```
 
 ### Releasing a new version
