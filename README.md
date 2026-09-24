@@ -96,8 +96,9 @@ may only see them there for a moment.
 - DownHere only deletes files that are exactly its small files. If you save the small file under another name, for
   example by clicking a file in the dialog, DownHere leaves it where it is and tells you, in case it replaced a file of
   yours.
-- In Chrome, another extension that renames or sorts downloads can get in the way. DownHere then says that it can’t
-  tell where your Downloads folder is, and you can type the folder name instead.
+- In Chrome, another extension that also handles downloads can get in the way. Usually DownHere then says that it
+  can’t tell where your Downloads folder is, and you can type the folder name instead. If that extension moves files
+  into subfolders, though, DownHere can fill in the wrong folder, so check the folder before you save the rule.
 - If a DownHere page is closed while its save dialog is open, the small file can stay where you saved it. DownHere
   usually deletes it the next time you use **Browse…**; otherwise you can delete it yourself.
 
@@ -139,8 +140,10 @@ may only see them there for a moment.
 - Browsers only let extensions save files inside your Downloads folder, the location set in Chrome’s
   **Settings › Downloads** or in Firefox’s **Settings › General › Files and Applications**. Your rule folders are
   created inside it. To use a different base folder, change that location in the browser.
-- Folder names can’t contain `%` or special space characters (such as a no-break space), because Firefox would change
-  them. Rules made with an earlier version keep such folders; in Firefox, their files stay in the Downloads folder.
+- Folder names can’t contain `%` or special space characters (such as a no-break space), or end in `.desktop`,
+  because Firefox would change them. Rules made with an earlier version keep such a folder, and you can still change
+  their other settings. Chrome saves their files there as before. In Firefox, their files stay in the Downloads
+  folder, and the popup and the settings page say so.
 - Files opened from your own computer (`file://` addresses) are never moved.
 
 ### In Chrome

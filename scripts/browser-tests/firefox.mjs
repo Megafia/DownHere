@@ -251,6 +251,9 @@ try {
   if (!optionsTab) throw new Error('DownHere’s settings page didn’t open.');
   pageTab ??= (await send('browsingContext.create', { type: 'tab' })).context;
 
+  // Wait until the page has shown the stored rules (none yet), so that it
+  // shows the test's rule because it changed.
+  await waitFor(() => evaluate(optionsTab, `!document.getElementById('rules-empty').hidden`));
   // Collects the settings page's errors, and describes the page when a check
   // about it fails.
   await evaluate(
@@ -451,6 +454,67 @@ try {
   await sleep(500);
   await noHelpersLeft('Nothing is left after choosing for the rule from the popup');
 
+  // -------------------------------------------------------------------------
+  // A rule made with a version before 0.3.0, whose folder Firefox would rename
+  // -------------------------------------------------------------------------
+
+  await evaluate(
+    optionsTab,
+    `chrome.storage.local.get('rules').then(({ rules }) => chrome.storage.local.set({
+      rules: [...rules, { id: 'old', domain: 'old.example', folder: '100% Done', includeSubdomains: true, enabled: true }],
+    }))`,
+  );
+  const oldRule = `document.querySelector('[data-rule-id="old"]')`;
+  await waitFor(() => evaluate(optionsTab, `Boolean(${oldRule})`));
+  const warning = await evaluate(optionsTab, `${oldRule}?.querySelector('.hint.is-error')?.textContent ?? ''`);
+  check(
+    'The settings page says that files for a rule with such a folder stay in the usual folder',
+    /can’t contain %/.test(warning) && /stay in your usual download folder/.test(warning),
+    warning,
+  );
+  await evaluate(optionsTab, `${oldRule}.querySelector('[data-action="edit"]').click()`);
+  const editorHint = JSON.parse(
+    await evaluate(
+      optionsTab,
+      `JSON.stringify({
+        text: document.getElementById('edit-folder-hint-old').textContent,
+        error: document.getElementById('edit-folder-hint-old').classList.contains('is-error'),
+      })`,
+    ),
+  );
+  await evaluate(
+    optionsTab,
+    `(() => {
+      const form = document.querySelector('[data-rule-id="old"] form');
+      form.elements.includeSubdomains.click();
+      form.querySelector('button[type="submit"]').click();
+    })()`,
+  );
+  let changed = {};
+  const oldSaved = await waitFor(async () => {
+    changed = JSON.parse(
+      await evaluate(optionsTab, `chrome.storage.local.get('rules').then(({ rules }) => JSON.stringify(rules.find((rule) => rule.id === 'old')))`),
+    );
+    return changed.includeSubdomains === false;
+  }, 5000);
+  check(
+    'Such a rule can still be changed without choosing another folder',
+    editorHint.error && /can’t contain %/.test(editorHint.text) && oldSaved && changed.folder === '100% Done',
+    JSON.stringify({ editorHint, changed }),
+  );
+  await evaluate(
+    optionsTab,
+    `(() => {
+      document.getElementById('test-file').value = 'https://old.example/file.zip';
+      document.getElementById('test-form').requestSubmit();
+    })()`,
+  );
+  let checked = '';
+  await waitFor(async () => {
+    checked = await evaluate(optionsTab, `document.getElementById('test-result').textContent`);
+    return checked !== '';
+  });
+  check('The download checker says that such a file would stay in the usual folder', /Firefox would change the name of its folder/.test(checked), checked);
 } catch (error) {
   check('The test ran to the end', false, error.stack);
 } finally {

@@ -104,7 +104,7 @@ describe('folderFromSavedFiles', () => {
   it('rejects folder names that rules can’t use', () => {
     const names = [' Music', 'Music.', 'Notes: 2026', 'a\\b', 'CON', 'PROGRA~1', 'x'.repeat(256),
       // Firefox would change these.
-      '100% done', 'no\u00a0break', 'thin\u2009space', 'line\u2028break'];
+      '100% done', 'no\u00a0break', 'thin\u2009space', 'line\u2028break', 'Links.desktop'];
     for (const name of names) {
       const result = folderFromSavedFiles(chosen(`${downloads}/Work/${name}`), check);
       assert.equal(result.outcome, 'invalid', name);
@@ -127,7 +127,9 @@ describe('folderChoiceMessage', () => {
       invalid: { outcome: 'invalid', error: 'Folder names can’t contain the character :' },
       checkCancelled: { outcome: 'check-cancelled' },
       checkRenamed: { outcome: 'check-renamed' },
-      noPath: { outcome: 'no-path' },
+      noPath: { outcome: 'no-path', left: { chosen: true, check: false } },
+      noPathCheck: { outcome: 'no-path', left: { chosen: false, check: true } },
+      noPathBoth: { outcome: 'no-path', left: { chosen: true, check: true } },
       folderError: { outcome: 'failed', error: 'FILE_ACCESS_DENIED', step: 'choose' },
       downloadsError: { outcome: 'failed', error: 'FILE_NO_SPACE', step: 'check' },
       blocked: { outcome: 'failed', error: 'FILE_BLOCKED', step: 'choose' },
@@ -139,7 +141,14 @@ describe('folderChoiceMessage', () => {
     assert.match(folderChoiceMessage(outcomes.invalid), /character :/);
     assert.match(folderChoiceMessage(outcomes.checkCancelled), new RegExp(CHECK_FILE_NAME));
     assert.match(folderChoiceMessage(outcomes.checkRenamed), /another extension/);
-    assert.match(folderChoiceMessage(outcomes.noPath), new RegExp(CHOOSE_FILE_NAME));
+    assert.match(folderChoiceMessage(outcomes.noPath), /saved a small file, so DownHere left “DownHere - choose this folder\.txt” in the folder you chose; you can delete it\./);
+    assert.doesNotMatch(folderChoiceMessage(outcomes.noPath), new RegExp(CHECK_FILE_NAME));
+    assert.match(folderChoiceMessage(outcomes.noPathCheck), /left “DownHere - Downloads folder check\.txt” in your Downloads folder; you can delete it\./);
+    assert.doesNotMatch(folderChoiceMessage(outcomes.noPathCheck), new RegExp(CHOOSE_FILE_NAME));
+    assert.match(
+      folderChoiceMessage(outcomes.noPathBoth),
+      /saved its small files, so DownHere left “DownHere - choose this folder\.txt” in the folder you chose and “DownHere - Downloads folder check\.txt” in your Downloads folder; you can delete them\./,
+    );
     assert.match(folderChoiceMessage(outcomes.folderError), /in that folder \(FILE_ACCESS_DENIED\)/);
     assert.match(folderChoiceMessage(outcomes.downloadsError), /in your Downloads folder \(FILE_NO_SPACE\)/);
     assert.match(folderChoiceMessage(outcomes.blocked), /blocked DownHere’s small file \(FILE_BLOCKED\)/);
@@ -492,13 +501,20 @@ describe('chooseFolder', () => {
     }
   });
 
-  it('Chrome: reports a path that the browser couldn’t tell, and leaves that file', async () => {
-    for (const answers of [[{ noPath: true }], [{ saveIn: '/home/me/Downloads/Work' }, { noPath: true }]]) {
+  it('Chrome: reports paths that the browser couldn’t tell, and leaves those files', async () => {
+    // The fake names a file without a path after its download: 1 is the file
+    // saved in the dialog, 2 the second file.
+    const cases = [
+      { answers: [{ noPath: true }], left: { chosen: true, check: false }, remaining: [1] },
+      { answers: [{ saveIn: '/home/me/Downloads/Work' }, { noPath: true }], left: { chosen: false, check: true }, remaining: [2] },
+      { answers: [{ noPath: true }, { noPath: true }], left: { chosen: true, check: true }, remaining: [1, 2] },
+    ];
+    for (const { answers, left, remaining } of cases) {
       const browser = new FakeBrowser({ askWhereToSave: answers.length === 2 });
       browser.answers.push(...answers);
-      assert.deepEqual(await chooseFolder(browser.api), { outcome: 'no-path' });
-      // Without a name, DownHere can't tell whether the file is its own.
-      assert.equal(browser.files.size, 1);
+      assert.deepEqual(await chooseFolder(browser.api), { outcome: 'no-path', left });
+      // Without a name, DownHere can't tell whether a file is its own.
+      assert.deepEqual([...browser.files.keys()], remaining.map((id) => `/home/me/Downloads/Ünïcode-${id}.txt`));
       browser.files.clear();
       assertCleanedUp(browser);
     }

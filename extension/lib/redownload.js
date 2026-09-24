@@ -27,7 +27,7 @@ const SKIP_EXPLANATIONS = {
   'not-repeatable': "a file that a page created itself can't be downloaded again",
   container: "downloads in container tabs aren't downloaded again",
   'unsafe-filename': "its name can't be used inside a folder",
-  'unsafe-folder': "Firefox would change the name of the rule's folder, which contains % or a special space",
+  'unsafe-folder': "Firefox would change the name of the rule's folder",
 };
 
 /**
@@ -44,9 +44,10 @@ export function planRedownload(item, rules, settings) {
   // A blob: address only works inside the page that created it.
   if (!/^(?:https?|data):/i.test(item.url ?? '')) return skip('not-repeatable');
   if (item.cookieStoreId && !DEFAULT_COOKIE_STORES.has(item.cookieStoreId)) return skip('container');
-  // Firefox changes "%" and some space characters in the names extensions give
-  // it, which would rename the file or put it into another folder. Rules made
-  // before version 0.3.0 can have such folders.
+  // Firefox changes "%" to "_" in the paths extensions give it, which would
+  // rename the file or put it into another folder, and refuses paths with some
+  // space characters or names ending in ".desktop". Rules made with versions
+  // before 0.3.0 can have such folders.
   const parts = decision.filename.split('/');
   if (checkFirefoxName(parts.pop())) return skip('unsafe-filename');
   if (parts.some((part) => checkFirefoxName(part))) return skip('unsafe-folder');

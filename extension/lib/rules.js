@@ -181,6 +181,9 @@ const SHORT_NAME_BREAKERS = /[\p{White_Space}"/:+|<>=;?,*]/u;
 // Firefox's downloads API turns these space characters into ordinary spaces,
 // and drops the line and paragraph separators.
 const FIREFOX_SPACES = /[\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f]/u;
+// Firefox treats these as Linux desktop shortcuts. The shortcut extensions
+// Chrome rejects too are in SHELL_EXTENSIONS.
+const FIREFOX_SHORTCUT = /\.desktop$/i;
 const SHELL_EXTENSIONS = new Set(['local', 'lnk', 'scf', 'url']);
 const RESERVED_DEVICE_NAMES = new Set([
   'con', 'prn', 'aux', 'nul', 'clock$',
@@ -260,12 +263,25 @@ export function checkPathComponent(name, { windowsShortNames = true } = {}) {
 /**
  * Explains what Firefox's downloads API would change in a name, or returns ""
  * when it keeps the name as it is. Firefox changes "%" to "_", so a file would
- * be saved in a differently named folder, and rejects some space characters.
+ * be saved in a differently named folder, and rejects some space characters
+ * and names ending in ".desktop", to which it would add ".download".
  */
 export function checkFirefoxName(name) {
   if (name.includes('%')) return 'Folder names can’t contain %, because Firefox changes it to _.';
   const space = FIREFOX_SPACES.exec(name)?.[0];
   if (space) return `This name contains a special space or line break (${describeCodePoint(space)}). Use an ordinary space.`;
+  if (FIREFOX_SHORTCUT.test(name)) {
+    return `Names ending in “${name.slice(name.lastIndexOf('.'))}” aren’t allowed, because Firefox adds “.download” to them.`;
+  }
+  return '';
+}
+
+/** Explains why Firefox can't save files in a rule's folder such as "Work/100%", or returns "". */
+export function checkFirefoxFolder(folder) {
+  for (const part of folder.split('/')) {
+    const problem = checkFirefoxName(part);
+    if (problem) return problem;
+  }
   return '';
 }
 
@@ -311,6 +327,17 @@ export function normalizeFolder(input, { portable = true } = {}) {
     if (problem) return { ok: false, error: problem };
   }
   return { ok: true, folder: parts.join('/') };
+}
+
+/**
+ * Like normalizeFolder(), but lets a rule that is being edited keep its folder
+ * (`current`) even if only Firefox can't use it (see checkFolderName()).
+ */
+export function normalizeRuleFolder(input, current) {
+  const result = normalizeFolder(input);
+  if (result.ok || current === undefined) return result;
+  const kept = normalizeFolder(input, { portable: false });
+  return kept.ok && kept.folder === current ? kept : result;
 }
 
 /** How a folder is shown to people: "Downloads/Work/Invoices". */
@@ -417,7 +444,7 @@ export function sortRules(rules) {
 
 /**
  * Validates a rule typed into a form. `editingId` is the rule being edited,
- * which may keep its own domain.
+ * which may keep its own domain and folder.
  *
  * @returns {{ok: true, value: {domain: string, includeSubdomains: boolean, folder: string}}
  *   | {ok: false, errors: {domain?: string, folder?: string}}}
@@ -425,7 +452,7 @@ export function sortRules(rules) {
 export function validateRuleInput(input, rules, editingId = null) {
   const errors = {};
   const domain = normalizeDomain(input.domain);
-  const folder = normalizeFolder(input.folder);
+  const folder = normalizeRuleFolder(input.folder, rules.find((rule) => rule.id === editingId)?.folder);
   if (!domain.ok) {
     errors.domain = domain.error;
   } else if (rules.some((rule) => rule.domain === domain.domain && rule.id !== editingId)) {

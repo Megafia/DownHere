@@ -13,6 +13,7 @@ import { loadState, updateSettings, updateState, watchState } from '../lib/stora
 import {
   describeSavedRule,
   fillFolderSuggestions,
+  firefoxFolderWarning,
   h,
   setFieldError,
   showFolderError,
@@ -76,6 +77,12 @@ function render({ resetForm }) {
   const status = $('site-status');
   if (!settings.enabled) {
     status.replaceChildren('DownHere is paused, so it doesn’t change where downloads are saved.');
+  } else if (active && firefoxFolderWarning(active.folder)) {
+    status.replaceChildren(
+      'Downloads from this site stay in your usual download folder, because Firefox would change the name of ',
+      h('strong', {}, displayFolder(active.folder)),
+      '.',
+    );
   } else if (active) {
     status.replaceChildren('Downloads from this site are saved in ', h('strong', {}, displayFolder(active.folder)), '.');
   } else {
@@ -98,7 +105,7 @@ function fillForm(rule) {
   $('save').textContent = rule ? 'Save changes' : 'Save';
   $('delete-rule').hidden = !rule;
   setFieldError($('domain'), $('domain-error'), '');
-  updateFolderHint($('folder'), $('folder-hint'));
+  updateFolderHint($('folder'), $('folder-hint'), rule?.folder);
 }
 
 function showMessage(text, { undo = false, tone = 'success' } = {}) {
@@ -117,7 +124,9 @@ function setUpControls() {
       formTouched = true;
     });
   }
-  folder.addEventListener('input', () => updateFolderHint(folder, $('folder-hint')));
+  folder.addEventListener('input', () =>
+    updateFolderHint(folder, $('folder-hint'), state.rules.find((rule) => rule.id === formRuleId)?.folder),
+  );
   domain.addEventListener('input', () => setFieldError(domain, $('domain-error'), ''));
 
   $('enabled').addEventListener('change', async (event) => {

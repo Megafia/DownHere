@@ -5,6 +5,7 @@ import {
   DEFAULT_SETTINGS,
   addRule,
   buildTargetPath,
+  checkFirefoxFolder,
   checkFirefoxName,
   checkFolderName,
   checkPathComponent,
@@ -20,6 +21,7 @@ import {
   mergeRules,
   normalizeDomain,
   normalizeFolder,
+  normalizeRuleFolder,
   parseBackup,
   removeRule,
   resolveDownload,
@@ -315,7 +317,9 @@ describe('normalizeFolder', () => {
 
   it('rejects names that Firefox would change, unless they come from rules made earlier', () => {
     const changed = ['100% Done', 'no\u00a0break', 'ogham\u1680space', 'en\u2002space', 'hair\u200aspace',
-      'line\u2028break', 'paragraph\u2029break', 'narrow\u202fspace', 'math\u205fspace'];
+      'line\u2028break', 'paragraph\u2029break', 'narrow\u202fspace', 'math\u205fspace',
+      // Firefox adds ".download" to these, as to the shortcut names Chrome rejects too.
+      'Links.desktop', 'Links.DeskTop', 'a.b.desktop'];
     for (const name of changed) {
       assert.notEqual(checkFirefoxName(name), '', JSON.stringify(name));
       assert.equal(normalizeFolder(`Work/${name}`).ok, false, JSON.stringify(name));
@@ -323,13 +327,31 @@ describe('normalizeFolder', () => {
     }
     assert.match(checkFolderName('100% Done'), /can’t contain %/);
     assert.match(checkFolderName('no\u00a0break'), /special space or line break \(U\+00A0\)/);
+    assert.equal(checkFolderName('Links.DeskTop'), 'Names ending in “.DeskTop” aren’t allowed, because Firefox adds “.download” to them.');
     // Firefox keeps these as they are.
-    for (const name of ['Work stuff', 'ideographic\u3000space', 'Ünïcödé', 'a&b', "It's #1"]) {
+    for (const name of ['Work stuff', 'ideographic\u3000space', 'Ünïcödé', 'a&b', "It's #1", 'desktop', 'Desktop.old', 'a.desktop.txt', 'a.desktops']) {
       assert.equal(checkFirefoxName(name), '', JSON.stringify(name));
       assert.equal(normalizeFolder(name).ok, true, JSON.stringify(name));
     }
     // Everything else is still checked.
     assert.equal(normalizeFolder('Work:2024', { portable: false }).ok, false);
+  });
+
+  it('checks every folder name in a rule’s folder for Firefox', () => {
+    assert.equal(checkFirefoxFolder('Work/Invoices'), '');
+    assert.match(checkFirefoxFolder('Work/100% Done/Sub'), /can’t contain %/);
+    assert.match(checkFirefoxFolder('Links.desktop/Sub'), /“\.desktop”/);
+  });
+
+  it('lets a rule keep its folder that only Firefox can’t use, but not change to another one', () => {
+    assert.deepEqual(normalizeRuleFolder('100% Done', '100% Done'), { ok: true, folder: '100% Done' });
+    assert.deepEqual(normalizeRuleFolder(' 100% Done\\ ', '100% Done'), { ok: true, folder: '100% Done' });
+    assert.equal(normalizeRuleFolder('50% Done', '100% Done').ok, false);
+    assert.equal(normalizeRuleFolder('100% Done', undefined).ok, false);
+    assert.equal(normalizeRuleFolder('100% Done/Sub', '100% Done').ok, false);
+    // Other problems are never kept.
+    assert.equal(normalizeRuleFolder('Work:2024', 'Work:2024').ok, false);
+    assert.deepEqual(normalizeRuleFolder('Work', '100% Done'), { ok: true, folder: 'Work' });
   });
 });
 
@@ -441,6 +463,20 @@ describe('sanitizeRules', () => {
     const added = addRule(rules, { domain: 'c.com', folder: '50% off', includeSubdomains: true });
     assert.equal(added.ok, false);
     assert.match(added.errors.folder, /can’t contain %/);
+    assert.equal(addRule(rules, { domain: 'c.com', folder: '100% Done', includeSubdomains: true }).ok, false);
+  });
+
+  it('lets such rules be edited as long as their folder stays the same', () => {
+    const rules = sanitizeRules([
+      { id: 'a', domain: 'a.com', folder: '100% Done', includeSubdomains: true },
+      { id: 'b', domain: 'b.com', folder: 'Work' },
+    ]);
+    const edited = editRule(rules, 'a', { domain: 'files.a.com', folder: '100% Done', includeSubdomains: false });
+    assert.equal(edited.ok, true);
+    assert.deepEqual(edited.rule, { id: 'a', domain: 'files.a.com', folder: '100% Done', includeSubdomains: false, enabled: true });
+    assert.match(editRule(rules, 'a', { domain: 'a.com', folder: '100% Done/Sub' }).errors.folder, /can’t contain %/);
+    // Another rule can't take over the folder.
+    assert.match(editRule(rules, 'b', { domain: 'b.com', folder: '100% Done' }).errors.folder, /can’t contain %/);
   });
 
   it('normalizes rules, drops invalid ones and keeps the first rule per domain', () => {

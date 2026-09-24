@@ -188,6 +188,8 @@ try {
   const options = await attach(browser, browser.optionsTarget.targetId);
   const extensionUrl = browser.optionsTarget.url.replace('options/options.html', '');
 
+  // Wait until the page has shown the stored rules (none yet).
+  await waitFor(() => options(`!document.getElementById('rules-empty').hidden`));
   await options(
     `chrome.storage.local.set({
       rules: [{ id: 'test', domain: 'localhost', folder: ${JSON.stringify(FOLDER)}, includeSubdomains: true, enabled: true }],
@@ -318,24 +320,30 @@ try {
   await askedForDialog('The settings page asks Chrome to open the save dialog for the popup’s form');
   await noHelpersLeft('Nothing is left after Browse… from the popup');
 
-  // The popup's own Browse… button. The popup only learns the address of the
-  // current tab when someone clicks DownHere's button, so the test tells it:
-  // the test website, which already has a rule. Browse… then continues on the
-  // settings page with editing that rule.
+  // Opens the popup in a tab. The popup only learns the address of the current
+  // tab when someone clicks DownHere's button, so the test tells it: the test
+  // website, which has a rule.
+  const openPopup = async () => {
+    const { targetId } = await browser.send('Target.createTarget', { url: 'about:blank' });
+    const popup = await attach(browser, targetId);
+    await browser.send('Page.enable', {}, popup.sessionId);
+    await browser.send(
+      'Page.addScriptToEvaluateOnNewDocument',
+      {
+        source: `if (location.protocol === 'chrome-extension:') {
+          chrome.tabs.query = async () => [{ id: 1, url: ${JSON.stringify(`${site}/page`)} }];
+        }`,
+      },
+      popup.sessionId,
+    );
+    await browser.send('Page.navigate', { url: `${extensionUrl}popup/popup.html` }, popup.sessionId);
+    return { popup, popupTarget: targetId };
+  };
+
+  // The popup's own Browse… button continues on the settings page with
+  // editing the website's rule.
   const earlier = new Set((await browser.send('Target.getTargets')).targetInfos.map((target) => target.targetId));
-  const { targetId: popupTarget } = await browser.send('Target.createTarget', { url: 'about:blank' });
-  const popup = await attach(browser, popupTarget);
-  await browser.send('Page.enable', {}, popup.sessionId);
-  await browser.send(
-    'Page.addScriptToEvaluateOnNewDocument',
-    {
-      source: `if (location.protocol === 'chrome-extension:') {
-        chrome.tabs.query = async () => [{ id: 1, url: ${JSON.stringify(`${site}/page`)} }];
-      }`,
-    },
-    popup.sessionId,
-  );
-  await browser.send('Page.navigate', { url: `${extensionUrl}popup/popup.html` }, popup.sessionId);
+  const { popup, popupTarget } = await openPopup();
   const popupShowsSite = await waitFor(async () => (await popup(`document.getElementById('site-host')?.textContent`)) === 'localhost');
   await popup(`(() => {
     document.getElementById('folder').value = 'From the popup';
@@ -376,6 +384,43 @@ try {
   );
   await askedForDialog('The popup’s Browse… makes Chrome open a save dialog for the rule');
   await noHelpersLeft('Nothing is left after the popup’s Browse…');
+
+  // Rules made with versions before 0.3.0 can have a folder that only Firefox
+  // can't use. Chrome keeps using it, and the rule can still be changed.
+  const storedRule = async () =>
+    JSON.parse(await options(`chrome.storage.local.get('rules').then(({ rules }) => JSON.stringify(rules.find((rule) => rule.id === 'test')))`));
+  await options(
+    `chrome.storage.local.get('rules').then(({ rules }) => chrome.storage.local.set({
+      rules: rules.map((rule) => (rule.id === 'test' ? { ...rule, folder: '100% Done', includeSubdomains: true } : rule)),
+    }))`,
+  );
+  const { popup: oldPopup } = await openPopup();
+  await waitFor(async () => (await oldPopup(`document.getElementById('folder')?.value`)) === '100% Done');
+  const oldShown = JSON.parse(
+    await oldPopup(
+      `JSON.stringify({
+        status: document.getElementById('site-status').textContent,
+        hint: document.getElementById('folder-hint').textContent,
+        error: document.getElementById('folder-hint').classList.contains('is-error'),
+      })`,
+    ),
+  );
+  const listWarning = await options(`document.querySelector('[data-rule-id="test"] .hint.is-error')?.textContent ?? ''`);
+  check(
+    'Chrome keeps using a rule’s folder that only Firefox can’t use',
+    oldShown.status === 'Downloads from this site are saved in Downloads/100% Done.' &&
+      oldShown.hint === 'Saves to Downloads/100% Done' &&
+      !oldShown.error &&
+      listWarning === '',
+    JSON.stringify({ ...oldShown, listWarning }),
+  );
+  await oldPopup(`document.getElementById('subdomains').click(); document.getElementById('save').click()`);
+  let changed = {};
+  const oldSaved = await waitFor(async () => {
+    changed = await storedRule();
+    return changed.includeSubdomains === false;
+  }, 5000);
+  check('The popup changes such a rule without changing its folder', oldSaved && changed.folder === '100% Done', JSON.stringify(changed));
 } catch (error) {
   check('The test ran to the end', false, error.stack);
 } finally {

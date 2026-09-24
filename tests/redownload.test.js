@@ -151,7 +151,7 @@ describe('planRedownload', () => {
   });
 
   it('skips rules whose folder Firefox would rename, which rules from before 0.3.0 can have', () => {
-    for (const folder of ['100% Done', 'Work/no\u00a0break', 'thin\u2009space/Sub']) {
+    for (const folder of ['100% Done', 'Work/no\u00a0break', 'thin\u2009space/Sub', 'Links.desktop', 'Work/A.DESKTOP']) {
       const plan = planRedownload(download(), [rule('example.com', folder)], DEFAULT_SETTINGS);
       assert.equal(plan.reason, 'unsafe-folder', folder);
       assert.equal(plan.rule.folder, folder);

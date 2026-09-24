@@ -188,15 +188,21 @@ function outcomeMessage(result) {
     case 'check-renamed':
       return (
         `DownHere’s second small file wasn’t saved as “${CHECK_FILE_NAME}”, so DownHere can’t tell where your ` +
-        'Downloads folder is. This happens when another extension renames or sorts downloads, or when the name is ' +
+        'Downloads folder is. This happens when another extension also handles downloads, or when the name is ' +
         'changed in the save dialog. Type the folder name instead, or try again.'
       );
-    case 'no-path':
+    case 'no-path': {
+      const left = [
+        result.left.chosen && `“${CHOOSE_FILE_NAME}” in the folder you chose`,
+        result.left.check && `“${CHECK_FILE_NAME}” in your Downloads folder`,
+      ].filter(Boolean);
+      const both = left.length > 1;
       return (
-        `Your browser didn’t tell DownHere where it saved the small file, so DownHere left “${CHOOSE_FILE_NAME}” ` +
-        'in the folder you chose; you can delete it. On Linux, this happens with folder names that have letters ' +
-        'like é or ü when the system doesn’t use UTF-8.'
+        `Your browser didn’t tell DownHere where it saved ${both ? 'its small files' : 'a small file'}, so DownHere ` +
+        `left ${left.join(' and ')}; you can delete ${both ? 'them' : 'it'}. On Linux, this happens with folder ` +
+        'names that have letters like é or ü when the system doesn’t use UTF-8.'
       );
+    }
     case 'failed':
       if (BLOCKED_ERRORS.has(result.error)) {
         return `Your browser or security software blocked DownHere’s small file (${result.error}). You can type the folder name instead.`;
@@ -223,9 +229,11 @@ function outcomeMessage(result) {
  * ('choosing') and when the second file is being saved ('checking').
  *
  * @returns {Promise<object>} One of the results of folderFromSavedFiles(), or
- *   {outcome: 'cancelled' | 'busy' | 'check-cancelled' | 'check-renamed' | 'no-path'},
- *   or {outcome: 'failed', error: string, step: 'choose' | 'check'}. Any of
- *   them can list `keptFiles`: saved files that weren't deleted.
+ *   {outcome: 'cancelled' | 'busy' | 'check-cancelled' | 'check-renamed'}, or
+ *   {outcome: 'no-path', left: {chosen: boolean, check: boolean}} (the files
+ *   whose path the browser didn't report, which stay where they are), or
+ *   {outcome: 'failed', error: string, step: 'choose' | 'check'}. Any of them
+ *   can list `keptFiles`: saved files that weren't deleted.
  */
 export function chooseFolder(api, { onProgress = () => {} } = {}) {
   return api.locks.request(LOCK_NAME, { ifAvailable: true }, async (lock) => {
@@ -254,8 +262,10 @@ async function chooseWith(helpers, onProgress) {
   if (check.cancelled) return { outcome: 'check-cancelled' };
   if (check.error) return { outcome: 'failed', error: check.error, step: 'check' };
   // Chrome on Linux reports no path when a name can't be converted to the
-  // system's character set.
-  if (!chosen.item.filename || !check.item.filename) return { outcome: 'no-path' };
+  // system's character set. Such a file can't be checked, so it stays.
+  if (!chosen.item.filename || !check.item.filename) {
+    return { outcome: 'no-path', left: { chosen: !chosen.item.filename, check: !check.item.filename } };
+  }
   // Only a file saved with DownHere's name is known to be in the Downloads
   // folder. Otherwise another extension named it (and may have moved it), or
   // it was renamed in the dialog that a browser set to ask for every file shows.
