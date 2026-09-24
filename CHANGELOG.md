@@ -2,7 +2,7 @@
 
 All notable changes to DownHere are listed here. Version numbers follow [Semantic Versioning](https://semver.org/).
 
-## 0.2.0 – Unreleased
+## 0.2.0 – 2026-09-24
 
 First release.
 
