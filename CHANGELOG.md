@@ -2,18 +2,22 @@
 
 All notable changes to DownHere are listed here. Version numbers follow [Semantic Versioning](https://semver.org/).
 
-## 0.1.0 – 2026-09-23
+## 0.2.0 – Unreleased
 
 First release.
 
+- Works in Chrome 121 and newer and in Firefox 140 and newer. Each release contains a ZIP for each browser.
 - Save downloads from chosen websites into folders inside the Downloads folder, including nested folders.
-- Rules match the page a download comes from and the file’s own address (before and after redirects), with or
-  without subdomains. When several rules fit the same address, the most specific one wins.
+- Rules match the page a download comes from and the file’s own address (in Chrome before and after redirects), with
+  or without subdomains. When several rules fit the same address, the most specific one wins.
 - Toolbar popup to choose the folder for the current website.
 - Settings page to add, edit, switch off and delete rules (with undo).
 - Settings for file name conflicts and page-or-file priority, plus a switch to pause DownHere.
-- DownHere only listens to downloads while it is on and has a rule switched on, so it doesn’t get in the way of
-  other extensions the rest of the time.
+- In Chrome, DownHere only listens to downloads while it is on and has a rule switched on, so it doesn’t get in the
+  way of other extensions the rest of the time.
+- Firefox doesn’t let extensions choose a download’s folder in advance, so there DownHere downloads each file from a
+  website with a rule a second time into the rule’s folder, and deletes the first copy once both match. Downloads
+  that can’t be repeated, such as files a page creates itself or gets from a form, stay where Firefox saved them.
 - Download checker that shows which folder an address would go to.
-- Backup and restore of rules and settings as a JSON file.
-- Folder names are checked against Chrome’s rules while you type.
+- Backup and restore of rules and settings as a JSON file, which also works between Chrome and Firefox.
+- Folder names are checked while you type, so that rules work in both browsers.

@@ -4,6 +4,16 @@ import { displayFolder, normalizeFolder } from './rules.js';
 
 const PROPERTIES = new Set(['checked', 'disabled', 'hidden']);
 
+/** The browser DownHere runs in: 'firefox' or 'chrome' (which includes other Chromium browsers). */
+export const BROWSER = chrome.runtime.getURL('').startsWith('moz-extension:') ? 'firefox' : 'chrome';
+
+/** Hides the elements marked with a data-browser attribute for the other browser. */
+export function showBrowserSpecific(root = document) {
+  for (const element of root.querySelectorAll('[data-browser]')) {
+    element.hidden = element.dataset.browser !== BROWSER;
+  }
+}
+
 /**
  * Creates an element. `props` become attributes, except `className`,
  * `dataset` and the boolean properties listed in PROPERTIES. Text children are

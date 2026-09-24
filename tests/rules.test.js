@@ -245,7 +245,7 @@ describe('checkPathComponent', () => {
 
   it('rejects extensions Windows treats as shortcuts', () => {
     for (const name of ['a.lnk', 'a.LOCAL', 'a.scf', 'a.url', 'a.{20D04FE0-3AEA-1069-A2D8-08002B30309D}']) {
-      assert.match(checkPathComponent(name), /doesn’t allow names ending in/, name);
+      assert.match(checkPathComponent(name), /^Names ending in .+ aren’t allowed\.$/, name);
     }
     assert.equal(checkPathComponent('a.lnk.gz'), '');
     assert.equal(checkPathComponent('a.urls'), '');

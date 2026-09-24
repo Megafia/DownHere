@@ -2,9 +2,9 @@
 
 **Choose which folder downloads are saved to, for each website.**
 
-DownHere is a Chrome extension that sorts your downloads as they happen. Tell it that files from `github.com` belong in
-`Downloads/Code/GitHub` and that invoices from your bank belong in `Downloads/Money/Invoices`, and every download from
-those sites lands in the right folder without a Save As dialog.
+DownHere is a Chrome and Firefox extension that sorts your downloads as they happen. Tell it that files from
+`github.com` belong in `Downloads/Code/GitHub` and that invoices from your bank belong in `Downloads/Money/Invoices`,
+and every download from those sites lands in the right folder without a Save As dialog.
 
 <p align="center">
   <img src="docs/screenshots/popup.png" width="340" alt="The DownHere popup on github.com, set to save downloads in Downloads/Code/GitHub">
@@ -18,20 +18,23 @@ those sites lands in the right folder without a Save As dialog.
 - **Subdomains included if you want them.** One rule for `google.com` can cover `drive.google.com` and
   `mail.google.com`, or you can give each its own folder. When several rules fit, the most specific one wins.
 - **Understands where a download really comes from.** Rules match the page you downloaded from as well as the file’s
-  own address, before and after redirects (for example, GitHub release files are served from another domain).
+  own address, in Chrome before and after redirects (for example, GitHub release files are served from another
+  domain).
 - **Your choice when a name is taken.** Keep both files, replace the old one, or be asked.
 - **Switch rules off** without deleting them, or pause DownHere entirely.
 - **Check before you download.** Paste an address to see which folder it would go to.
-- **Back up and restore** your rules and settings as a file.
-- **Private.** No accounts, no tracking, no network requests. Light and dark mode.
+- **Back up and restore** your rules and settings as a file, also to move them between Chrome and Firefox.
+- **Private.** No accounts, no tracking, and nothing is sent anywhere. Light and dark mode.
 
 ![DownHere settings page with a list of rules](docs/screenshots/options.png)
 
 ## Install
 
-DownHere isn’t in the Chrome Web Store yet. To install it:
+DownHere isn’t in the Chrome Web Store or on addons.mozilla.org yet.
 
-1. Download `downhere-<version>.zip` from the [latest release](https://github.com/Megafia/DownHere/releases/latest)
+### Chrome
+
+1. Download `downhere-<version>-chrome.zip` from the [latest release](https://github.com/Megafia/DownHere/releases/latest)
    and unzip it into a folder you’ll keep. Chrome loads the extension from that folder, so don’t delete it.
 2. Open `chrome://extensions` in Chrome.
 3. Switch on **Developer mode** (top-right corner).
@@ -41,7 +44,23 @@ DownHere isn’t in the Chrome Web Store yet. To install it:
 
 To run DownHere from the source code instead, clone this repository and select its `extension` folder in step 4.
 
-DownHere needs Chrome 120 or newer. Other Chromium-based browsers may work too, but haven’t been tested.
+DownHere needs Chrome 121 or newer. Other Chromium-based browsers may work too, but haven’t been tested.
+
+### Firefox
+
+Firefox only keeps add-ons installed for good once Mozilla has signed them. Until DownHere is signed, you can load
+it for as long as Firefox is open:
+
+1. Download `downhere-<version>-firefox.zip` from the
+   [latest release](https://github.com/Megafia/DownHere/releases/latest). There’s no need to unzip it.
+2. Open `about:debugging#/runtime/this-firefox` in Firefox.
+3. Click **Load Temporary Add-on…** and select the ZIP file.
+4. Optional: open the puzzle-piece **Extensions** menu in the toolbar, click the gear next to DownHere and choose
+   **Pin to Toolbar**.
+
+To run DownHere from the source code instead, clone this repository and select `extension/manifest.json` in step 3.
+
+DownHere needs Firefox 140 or newer. See [In Firefox](#in-firefox) for how it works there.
 
 ## How to use it
 
@@ -49,9 +68,9 @@ DownHere needs Chrome 120 or newer. Other Chromium-based browsers may work too, 
 files you download from that site are saved in that folder inside your Downloads folder. Use `/` for subfolders, for
 example `Work/Invoices`.
 
-**On the settings page** (right-click the DownHere button and choose **Options**, or click **All rules and settings**
-in the popup) you can add, edit, switch off and delete rules, change settings, check where a download will go, and back
-up your rules.
+**On the settings page** (click **All rules and settings** in the popup, or in Chrome right-click the DownHere button
+and choose **Options**) you can add, edit, switch off and delete rules, change settings, check where a download will
+go, and back up your rules.
 
 ## How rules are matched
 
@@ -60,13 +79,14 @@ up your rules.
   Typing `*.example.com` switches on subdomains for you.
 - Every download has two addresses: the **page** you were on and the **file’s own address**. DownHere checks the page
   first, then the file’s address before and after any redirects. The first address that has a rule decides the folder.
-  In the settings you can make the file’s own address go first instead.
-- The page address is the one Chrome records as the download’s referrer. Some websites and links hide it; then only
-  the file’s own address is checked. For a download started inside an embedded frame, it is the frame’s address.
+  In the settings you can make the file’s own address go first instead. Firefox doesn’t tell extensions where a
+  redirect led, so there only the file’s address before redirects is checked.
+- The page address is the one the browser records as the download’s referrer. Some websites and links hide it; then
+  only the file’s own address is checked. For a download started inside an embedded frame, it is the frame’s address.
 - When several rules fit the same address, the most specific one wins: a rule for `docs.example.com` beats one for
   `example.com`.
-- Rules that are switched off are skipped. Downloads that match no rule are saved wherever Chrome would normally put
-  them.
+- Rules that are switched off are skipped. Downloads that match no rule are saved wherever the browser would normally
+  put them.
 
 | Rules | You download… | Saved in |
 | --- | --- | --- |
@@ -77,8 +97,9 @@ up your rules.
 
 ## Settings
 
-- **If the folder already has a file with the same name:** keep both (Chrome adds a number such as `report (1).pdf`),
-  replace the existing file, or ask where to save the new one.
+- **If the folder already has a file with the same name:** keep both (the browser adds a number, such as
+  `report (1).pdf`), replace the existing file, or ask where to save the new one. Firefox can’t ask, so there “ask”
+  keeps both files.
 - **If the page and the file match different rules:** use the rule for the page (default) or for the file’s own
   address.
 - **On / Paused:** the switch at the top of the popup and the settings page turns all rules on or off at once. While
@@ -86,9 +107,13 @@ up your rules.
 
 ## Good to know
 
-- Chrome only lets extensions save files inside your Downloads folder, the location set in Chrome’s
-  **Settings › Downloads**. Your rule folders are created inside it. To use a different base folder, change that
-  location in Chrome.
+- Browsers only let extensions save files inside your Downloads folder, the location set in Chrome’s
+  **Settings › Downloads** or in Firefox’s **Settings › General › Files and Applications**. Your rule folders are
+  created inside it. To use a different base folder, change that location in the browser.
+- Files opened from your own computer (`file://` addresses) are never moved.
+
+### In Chrome
+
 - Use real folders for rules. Newer versions of Chrome don’t follow symbolic links or junctions that lead outside the
   Downloads folder.
 - DownHere only chooses the folder. Files keep the name Chrome gives them. A few names, such as `CON.txt` or shortcut
@@ -96,7 +121,6 @@ up your rules.
   leaves those files in the Downloads folder. On Windows, Chrome renames such files first (for example to
   `_CON.txt`), so they are sorted as usual.
 - If Chrome is set to ask where to save each file, the save dialog suggests the rule’s folder.
-- Files opened from your own computer (`file://` addresses) are never moved.
 - Rules only apply in Incognito windows if you allow DownHere in Incognito
   (`chrome://extensions` › DownHere › **Details**).
 - While DownHere is on and has a rule switched on, Chrome ignores the folder and file name that other extensions ask
@@ -108,15 +132,37 @@ up your rules.
 - On Linux, folder names with non-English characters need a UTF-8 system locale (the default on current
   distributions); otherwise Chrome saves the files in the Downloads folder instead.
 
+### In Firefox
+
+Firefox doesn’t let extensions choose the folder before a file is saved. So DownHere lets each download from a
+website with a rule finish in the Downloads folder, downloads the same address again into the rule’s folder, and
+deletes the first copy once the second one has arrived with the same size and type. For a moment you’ll see both in
+the downloads list. Each sorted file is downloaded twice, which takes longer for very large files.
+
+Whenever something doesn’t work out, the first copy simply stays in the Downloads folder, so no download is lost.
+That’s always the case for:
+
+- files a page creates itself (their address starts with `blob:`), which can’t be downloaded again;
+- files you get by sending a form, and links that only work once;
+- downloads in container tabs, because downloading them again would send the wrong cookies;
+- files you choose a place for yourself, for example with **Always ask you where to save files**;
+- files with `%` in their name, which Firefox would rename, and the few names Chrome doesn’t accept either;
+- files that other extensions download.
+
+Rules only apply in private windows if DownHere may run there (`about:addons` › DownHere ›
+**Run in Private Windows**). If a file from a website with a rule wasn’t sorted and you’d like to know why, open
+`about:debugging#/runtime/this-firefox` and click **Inspect** next to DownHere; its console says why.
+
 ## Privacy and permissions
 
 DownHere doesn’t collect, send or share any data. Your rules and settings are stored only in your browser
-(`chrome.storage.local`), and the extension contains no code that talks to the network.
+(`storage.local`). In Chrome, the extension makes no network requests at all. In Firefox, it only downloads a file a
+second time from the address it came from, as described above.
 
 | Permission | Why it’s needed |
 | --- | --- |
-| `downloads` | To choose the folder while Chrome is naming a download. Chrome shows this as “Manage your downloads”. |
-| `storage` | To keep your rules and settings. |
+| `downloads` | Chrome: to choose the folder while Chrome is naming a download (shown as “Manage your downloads”). Firefox: to download a file again into its folder and remove the first copy (shown as “Download files and read and modify the browser’s download history”). |
+| `storage` | To keep your rules and settings, and in Firefox the downloads being sorted. |
 | `activeTab` | To read the address of the current tab, only when you click the DownHere button, so the popup can fill in the website. |
 
 ## Development
@@ -125,17 +171,25 @@ The extension is plain JavaScript with no build step and no dependencies. [Node.
 is only needed for the tests and for packaging.
 
 ```sh
-npm test          # run the unit tests
-npm run package   # create dist/downhere-<version>.zip
+npm test               # run the unit tests
+npm run test:firefox   # try DownHere in a real Firefox (needs Firefox 140 or newer)
+npm run package        # create dist/downhere-<version>-chrome.zip and dist/downhere-<version>-firefox.zip
 ```
 
-After changing files in `extension/`, click the reload button on DownHere’s card in `chrome://extensions`.
+`extension/manifest.json` works in both browsers, so the `extension` folder can be loaded as it is (Chrome may warn
+about the keys only Firefox uses; the packaged ZIPs leave out the other browser’s keys). After changing
+files in `extension/`, click the reload button on DownHere’s card in `chrome://extensions`, or **Reload** next to
+DownHere in Firefox’s `about:debugging#/runtime/this-firefox`.
+
+`npm run test:firefox` starts Firefox without a window and with a new, empty profile, so your own Firefox isn’t
+touched. Set `FIREFOX` to the Firefox program if it isn’t found.
 
 ```text
 extension/
-  manifest.json      Extension manifest (Manifest V3)
-  background.js      Service worker: picks the folder for each download
+  manifest.json      Extension manifest (Manifest V3, for Chrome and Firefox)
+  background.js      Background script: picks the folder for each download
   lib/rules.js       Rule matching and Chrome's path rules (no browser APIs, unit tested)
+  lib/redownload.js  Firefox: downloads a file again into its folder (unit tested)
   lib/storage.js     Reading and saving rules and settings
   lib/ui.js          Shared helpers for the popup and settings page
   popup/             Toolbar popup
@@ -144,9 +198,9 @@ extension/
   icons/             Extension icons
 assets/icon.svg      Source of the icons
 docs/screenshots/    Images used in this README
-scripts/package.mjs  Builds the ZIP for the Chrome Web Store and releases
+scripts/             Packaging (package.mjs, manifests.mjs) and the Firefox test (firefox-test.mjs)
 tests/               Unit tests (Node's built-in test runner)
-.github/workflows/   Adds the built ZIP to each GitHub release
+.github/workflows/   Adds the built ZIPs to each GitHub release
 ```
 
 ### Releasing a new version
@@ -161,10 +215,14 @@ tests/               Unit tests (Node's built-in test runner)
    git push origin v0.2.0
    ```
 
-3. The **Release** workflow then runs the tests, builds `downhere-0.2.0.zip` and attaches it to the release (it
-   creates the release if you only pushed a tag). If the release has no description, it uses the notes from the
-   changelog. It stops with an error if the tag doesn’t match the version in both files.
-4. To update the Chrome Web Store listing, upload the same ZIP in the Chrome Web Store Developer Dashboard.
+3. The **Release** workflow then runs the tests, builds `downhere-0.2.0-chrome.zip` and `downhere-0.2.0-firefox.zip`
+   and attaches them to the release (it creates the release if you only pushed a tag). If the release has no
+   description, it uses the notes from the changelog. It stops with an error if the tag doesn’t match the version in
+   both files.
+4. To update the Chrome Web Store listing, upload the Chrome ZIP in the Chrome Web Store Developer Dashboard. For
+   Firefox, upload the Firefox ZIP on [addons.mozilla.org](https://addons.mozilla.org/developers/) to have it signed,
+   either listed there or for sharing yourself. The add-on ID in `manifest.json` (`downhere@megafia.github.io`) can’t
+   change once it has been submitted.
 
 ## License
 

@@ -58,7 +58,7 @@
       <section class="card" aria-labelledby="rules-title">
         <h2 id="rules-title" tabindex="-1">Rules <span class="count" id="rule-count"></span></h2>
         <p class="empty" id="rules-empty">
-          No rules yet. Add one above, or click the DownHere button in Chrome’s toolbar while you’re on a website.
+          No rules yet. Add one above, or click the DownHere button in the toolbar while you’re on a website.
         </p>
         <ul class="rule-list" id="rule-list"></ul>
       </section>
@@ -72,7 +72,11 @@
             <option value="overwrite">Replace the existing file</option>
             <option value="prompt">Ask me where to save the new file</option>
           </select>
-          <p class="hint">Applies to downloads that DownHere puts into a folder.</p>
+          <p class="hint" data-browser="chrome">Applies to downloads that DownHere puts into a folder.</p>
+          <p class="hint" data-browser="firefox">
+            Applies to downloads that DownHere puts into a folder. Firefox can’t ask where to save those, so “Ask me”
+            keeps both files instead.
+          </p>
         </div>
         <fieldset class="setting">
           <legend class="label">If the page and the file match different rules</legend>
@@ -129,33 +133,60 @@
       <section class="card notes" aria-labelledby="notes-title">
         <h2 id="notes-title">Good to know</h2>
         <ul>
-          <li>
+          <li data-browser="firefox">
+            Firefox doesn’t let extensions choose the folder before a file is saved. So when a download from a website
+            with a rule has finished, DownHere downloads the file again into the rule’s folder, checks that both copies
+            match and deletes the first one. For a moment you’ll see both in the downloads list.
+          </li>
+          <li data-browser="firefox">
+            Some downloads can’t be repeated, so they stay where Firefox saved them: files a page creates itself (their
+            address starts with blob:), files you get by sending a form, links that only work once, downloads in
+            container tabs, and files you choose a place for yourself.
+          </li>
+          <li data-browser="chrome">
             Chrome only lets extensions save files inside your Downloads folder (the location set in Chrome’s
             Settings › Downloads). DownHere creates the folders you choose there automatically.
+          </li>
+          <li data-browser="firefox">
+            Firefox only lets extensions save files inside your Downloads folder (the one set in Firefox’s Settings ›
+            General › Files and Applications). DownHere creates the folders you choose there automatically.
           </li>
           <li>
             A rule for example.com also covers www.example.com. Switch on “Include subdomains” to cover addresses
             such as files.example.com too. When several rules fit the same address, the most specific one wins.
           </li>
-          <li>
+          <li data-browser="chrome">
             DownHere only chooses the folder; files keep the name Chrome gives them. Outside Windows, a few names that
             some versions of Chrome don’t allow inside folders (such as CON.txt) stay in the Downloads folder.
           </li>
-          <li>If Chrome is set to ask where to save each file, the save dialog suggests the rule’s folder.</li>
-          <li>
+          <li data-browser="firefox">
+            DownHere only chooses the folder; files keep the name Firefox gives them. Files with % in their name (which
+            Firefox would change) and a few unusual names such as CON.txt stay in the Downloads folder.
+          </li>
+          <li data-browser="chrome">If Chrome is set to ask where to save each file, the save dialog suggests the rule’s folder.</li>
+          <li data-browser="chrome">
             Rules only apply in Incognito windows if you allow DownHere in Incognito (chrome://extensions ›
             DownHere › Details).
           </li>
-          <li>
+          <li data-browser="firefox">
+            Rules only apply in private windows if you allow DownHere to run in them (about:addons › DownHere ›
+            Run in Private Windows).
+          </li>
+          <li data-browser="chrome">
             While DownHere is on and has a rule switched on, Chrome ignores the folder and file name that other
             extensions ask for when they download something. Pause DownHere to let them choose again.
           </li>
-          <li>
+          <li data-browser="chrome">
             If another extension also watches downloads while Chrome names them (download managers and organizers
             often do), Chrome lets only one of them decide while both are active: the one installed or updated most
             recently, even for downloads it doesn’t change.
           </li>
-          <li>Your rules are stored only in this browser. DownHere doesn’t send any data anywhere.</li>
+          <li data-browser="firefox">Files that other extensions download are left where those extensions put them.</li>
+          <li data-browser="chrome">Your rules are stored only in this browser. DownHere doesn’t send any data anywhere.</li>
+          <li data-browser="firefox">
+            Your rules are stored only in this browser. DownHere doesn’t send any data anywhere; it only downloads files
+            a second time from the address they came from.
+          </li>
         </ul>
       </section>
     </main>

@@ -1,24 +1,36 @@
-// Chooses the folder for each download while Chrome is naming the file.
+// Chooses the folder for each download. Chrome lets DownHere answer while it
+// names the file. Firefox can't, so there DownHere downloads the file again
+// into the rule's folder instead (see lib/redownload.js).
 
+import { createRedownloader } from './lib/redownload.js';
 import { isRoutingActive, resolveDownload } from './lib/rules.js';
 import { loadState } from './lib/storage.js';
 
 const downloadEvent = chrome.downloads.onDeterminingFilename;
 let listenerUpdates = 0;
 
-// Chrome lets the extension that was installed or updated most recently decide
-// every download it is told about, even when it answers "no change", and the
-// file names other extensions ask for are then ignored. So DownHere only
-// listens while it is switched on and has a rule switched on.
-//
-// The listener is still added synchronously on every start, because Chrome can
-// only wake this service worker for events that were registered that way;
-// updateListener() removes it again when it isn't needed.
-downloadEvent.addListener(onDeterminingFilename);
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === 'local' && ('rules' in changes || 'settings' in changes)) updateListener();
-});
-updateListener();
+if (downloadEvent) {
+  // Chrome lets the extension that was installed or updated most recently decide
+  // every download it is told about, even when it answers "no change", and the
+  // file names other extensions ask for are then ignored. So DownHere only
+  // listens while it is switched on and has a rule switched on.
+  //
+  // The listener is still added synchronously on every start, because Chrome can
+  // only wake this service worker for events that were registered that way;
+  // updateListener() removes it again when it isn't needed.
+  downloadEvent.addListener(onDeterminingFilename);
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && ('rules' in changes || 'settings' in changes)) updateListener();
+  });
+  updateListener();
+} else {
+  // Firefox also only wakes this background page for listeners that were
+  // added synchronously when it started.
+  const redownloader = createRedownloader({ downloads: chrome.downloads, storage: chrome.storage.session, loadState });
+  chrome.downloads.onCreated.addListener(redownloader.onCreated);
+  chrome.downloads.onChanged.addListener(redownloader.onChanged);
+  chrome.downloads.onErased.addListener(redownloader.onErased);
+}
 
 async function updateListener() {
   // Only the newest call decides, so an older, slower read can't undo it.
