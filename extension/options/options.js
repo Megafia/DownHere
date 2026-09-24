@@ -17,10 +17,12 @@ import {
 } from '../lib/rules.js';
 import { loadState, updateSettings, updateState, watchState } from '../lib/storage.js';
 import {
+  BROWSER,
   describeSavedRule,
   fillFolderSuggestions,
   h,
   setFieldError,
+  showBrowserSpecific,
   showFolderError,
   updateFolderHint,
 } from '../lib/ui.js';
@@ -39,6 +41,7 @@ let busy = false;
 // Rules deleted while the current "Undo" message is showing: [{rule, index}].
 let undoStack = [];
 
+showBrowserSpecific();
 setUpAddForm();
 setUpRuleList();
 setUpSettings();
@@ -491,6 +494,9 @@ function setUpSettings() {
     renderSettings();
   };
   $('enabled').addEventListener('change', (event) => save({ enabled: event.target.checked }));
+  // Firefox can't ask where to save a file that DownHere downloads again. The
+  // setting can still arrive from a Chrome backup; it then keeps both files.
+  $('conflict-action').querySelector('option[value="prompt"]').disabled = BROWSER === 'firefox';
   $('conflict-action').addEventListener('change', (event) => save({ conflictAction: event.target.value }));
   for (const radio of document.querySelectorAll('input[name="prefer-source"]')) {
     radio.addEventListener('change', () => save({ preferSource: radio.value }));
@@ -529,6 +535,14 @@ function setUpTester() {
       return;
     }
     const match = findRuleForDownload({ url: fileUrl, finalUrl: fileUrl, referrer: pageUrl }, rules, settings.preferSource);
+    if (match && BROWSER === 'firefox' && /^blob:/i.test(fileUrl)) {
+      show(
+        'Firefox can’t download files that a page created itself (blob: addresses) a second time, so this file ' +
+          'would stay in your usual download folder.',
+        'neutral',
+      );
+      return;
+    }
     if (match) {
       const via = match.source === 'page' ? 'the page address' : 'the file address';
       show(
@@ -542,7 +556,7 @@ function setUpTester() {
       .map((host) => findRuleForHost(rules, host, { includeDisabled: true }))
       .find(Boolean);
     show(
-      'No rule matches, so this file would be saved in Chrome’s usual download folder.' +
+      'No rule matches, so this file would be saved in your usual download folder.' +
         (offRule ? ` The rule for ${offRule.domain} would match, but it is switched off.` : ''),
       'neutral',
     );

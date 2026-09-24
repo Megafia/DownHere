@@ -79,7 +79,7 @@ function render({ resetForm }) {
   } else if (active) {
     status.replaceChildren('Downloads from this site are saved in ', h('strong', {}, displayFolder(active.folder)), '.');
   } else {
-    status.replaceChildren('Downloads from this site go to Chrome’s usual download folder.');
+    status.replaceChildren('Downloads from this site go to your usual download folder.');
   }
 
   $('rule-off').hidden = !shown || shown.enabled;

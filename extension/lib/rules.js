@@ -9,7 +9,7 @@ export const PREFER_SOURCES = Object.freeze(['page', 'file']);
 export const DEFAULT_SETTINGS = Object.freeze({
   // Master switch. When false, DownHere doesn't touch any download.
   enabled: true,
-  // What Chrome should do when a routed file's name is already taken.
+  // What the browser should do when a routed file's name is already taken.
   conflictAction: 'uniquify',
   // Which address wins when the page and the file match different rules.
   preferSource: 'page',
@@ -168,7 +168,8 @@ export function findRuleForDownload(item, rules, preferSource = DEFAULT_SETTINGS
 // Chrome only accepts a suggested download path if every part of it passes
 // net::IsSafePortablePathComponent(). Anything else is silently ignored and
 // the file lands in the Downloads folder instead, so the checks below mirror
-// Chrome's rules to catch problems while the user is still typing.
+// Chrome's rules to catch problems while the user is still typing. They apply
+// in Firefox too, so rules and backups work in both browsers.
 // ---------------------------------------------------------------------------
 
 const ALWAYS_ILLEGAL = new Set(['"', '*', '/', ':', '<', '>', '?', '\\', '|']);
@@ -247,7 +248,7 @@ export function checkPathComponent(name, { windowsShortNames = true } = {}) {
   const lastDot = name.lastIndexOf('.');
   const extension = lastDot === -1 ? '' : asciiLowerCase(name.slice(lastDot + 1));
   if (SHELL_EXTENSIONS.has(extension) || (extension.startsWith('{') && extension.endsWith('}'))) {
-    return `Chrome doesn’t allow names ending in “.${name.slice(lastDot + 1)}”.`;
+    return `Names ending in “.${name.slice(lastDot + 1)}” aren’t allowed.`;
   }
   if (isReservedWindowsName(name)) return `“${name}” is a reserved name on Windows.`;
   return '';
@@ -278,7 +279,7 @@ export function normalizeFolder(input) {
     return {
       ok: false,
       error: 'Use a folder inside Downloads, like Work/Invoices, not a full path. ' +
-        'Chrome doesn’t let extensions save anywhere else.',
+        'Browsers don’t let extensions save anywhere else.',
     };
   }
   const parts = text
@@ -299,9 +300,10 @@ export function displayFolder(folder) {
 }
 
 /**
- * Joins a rule's folder with the file name Chrome proposed. Returns "" when
- * Chrome would reject the file name inside a suggested path; the download is
- * then left alone rather than renamed.
+ * Joins a rule's folder with the file name the browser proposed (Firefox
+ * reports a full path, of which only the name is used). Returns "" when Chrome
+ * would reject the file name inside a suggested path; the download is then
+ * left alone rather than renamed.
  */
 export function buildTargetPath(folder, proposedFilename) {
   const name = String(proposedFilename ?? '').split(/[\\/]/).pop();
