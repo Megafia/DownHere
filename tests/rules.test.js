@@ -5,6 +5,7 @@ import {
   DEFAULT_SETTINGS,
   addRule,
   buildTargetPath,
+  checkFirefoxName,
   checkFolderName,
   checkPathComponent,
   createBackup,
@@ -311,6 +312,25 @@ describe('normalizeFolder', () => {
     assert.equal(normalizeFolder('é'.repeat(128)).ok, false);
     assert.equal(checkFolderName('é'.repeat(127)), '');
   });
+
+  it('rejects names that Firefox would change, unless they come from rules made earlier', () => {
+    const changed = ['100% Done', 'no\u00a0break', 'ogham\u1680space', 'en\u2002space', 'hair\u200aspace',
+      'line\u2028break', 'paragraph\u2029break', 'narrow\u202fspace', 'math\u205fspace'];
+    for (const name of changed) {
+      assert.notEqual(checkFirefoxName(name), '', JSON.stringify(name));
+      assert.equal(normalizeFolder(`Work/${name}`).ok, false, JSON.stringify(name));
+      assert.deepEqual(normalizeFolder(`Work/${name}`, { portable: false }), { ok: true, folder: `Work/${name}` });
+    }
+    assert.match(checkFolderName('100% Done'), /can’t contain %/);
+    assert.match(checkFolderName('no\u00a0break'), /special space or line break \(U\+00A0\)/);
+    // Firefox keeps these as they are.
+    for (const name of ['Work stuff', 'ideographic\u3000space', 'Ünïcödé', 'a&b', "It's #1"]) {
+      assert.equal(checkFirefoxName(name), '', JSON.stringify(name));
+      assert.equal(normalizeFolder(name).ok, true, JSON.stringify(name));
+    }
+    // Everything else is still checked.
+    assert.equal(normalizeFolder('Work:2024', { portable: false }).ok, false);
+  });
 });
 
 describe('buildTargetPath', () => {
@@ -412,6 +432,17 @@ describe('sanitizeSettings', () => {
 });
 
 describe('sanitizeRules', () => {
+  it('keeps rules from before 0.3.0 whose folder only Firefox can’t use, but new rules can’t have one', () => {
+    const rules = sanitizeRules([
+      { id: 'a', domain: 'a.com', folder: '100% Done' },
+      { id: 'b', domain: 'b.com', folder: 'Work/no\u00a0break' },
+    ]);
+    assert.deepEqual(rules.map((rule) => rule.folder), ['100% Done', 'Work/no\u00a0break']);
+    const added = addRule(rules, { domain: 'c.com', folder: '50% off', includeSubdomains: true });
+    assert.equal(added.ok, false);
+    assert.match(added.errors.folder, /can’t contain %/);
+  });
+
   it('normalizes rules, drops invalid ones and keeps the first rule per domain', () => {
     const rules = sanitizeRules([
       { id: 'a', domain: 'WWW.Example.com', folder: ' Example / Files ', includeSubdomains: false, enabled: false },

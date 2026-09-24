@@ -102,7 +102,10 @@ describe('folderFromSavedFiles', () => {
   });
 
   it('rejects folder names that rules can’t use', () => {
-    for (const name of [' Music', 'Music.', 'Notes: 2026', 'a\\b', 'CON', 'PROGRA~1', 'x'.repeat(256)]) {
+    const names = [' Music', 'Music.', 'Notes: 2026', 'a\\b', 'CON', 'PROGRA~1', 'x'.repeat(256),
+      // Firefox would change these.
+      '100% done', 'no\u00a0break', 'thin\u2009space', 'line\u2028break'];
+    for (const name of names) {
       const result = folderFromSavedFiles(chosen(`${downloads}/Work/${name}`), check);
       assert.equal(result.outcome, 'invalid', name);
       assert.ok(result.error.length > 0, name);
@@ -117,22 +120,39 @@ describe('folderChoiceMessage', () => {
   });
 
   it('explains every other outcome', () => {
-    const outcomes = [
-      { outcome: 'busy' },
-      { outcome: 'downloads-folder' },
-      { outcome: 'outside', downloadsFolder: '/home/me/Downloads' },
-      { outcome: 'invalid', error: 'Folder names can’t contain the character :' },
-      { outcome: 'check-failed' },
-      { outcome: 'no-path' },
-      { outcome: 'failed', error: 'FILE_ACCESS_DENIED' },
-      { outcome: 'failed', error: 'Something broke' },
-    ];
-    for (const result of outcomes) assert.ok(folderChoiceMessage(result).length > 20, result.outcome);
-    assert.match(folderChoiceMessage(outcomes[2]), /\(\/home\/me\/Downloads\)/);
-    assert.match(folderChoiceMessage(outcomes[3]), /character :/);
-    assert.match(folderChoiceMessage(outcomes[4]), new RegExp(CHECK_FILE_NAME));
-    assert.match(folderChoiceMessage(outcomes[6]), /couldn’t save a file in that folder \(FILE_ACCESS_DENIED\)/);
-    assert.match(folderChoiceMessage(outcomes[7]), /Something broke/);
+    const outcomes = {
+      busy: { outcome: 'busy' },
+      downloadsFolder: { outcome: 'downloads-folder' },
+      outside: { outcome: 'outside', downloadsFolder: '/home/me/Downloads' },
+      invalid: { outcome: 'invalid', error: 'Folder names can’t contain the character :' },
+      checkCancelled: { outcome: 'check-cancelled' },
+      checkRenamed: { outcome: 'check-renamed' },
+      noPath: { outcome: 'no-path' },
+      folderError: { outcome: 'failed', error: 'FILE_ACCESS_DENIED', step: 'choose' },
+      downloadsError: { outcome: 'failed', error: 'FILE_NO_SPACE', step: 'check' },
+      blocked: { outcome: 'failed', error: 'FILE_BLOCKED', step: 'choose' },
+      other: { outcome: 'failed', error: 'Something broke' },
+    };
+    for (const [name, result] of Object.entries(outcomes)) assert.ok(folderChoiceMessage(result).length > 20, name);
+    assert.match(folderChoiceMessage(outcomes.downloadsFolder), /If no save dialog opened/);
+    assert.match(folderChoiceMessage(outcomes.outside), /\(\/home\/me\/Downloads\)/);
+    assert.match(folderChoiceMessage(outcomes.invalid), /character :/);
+    assert.match(folderChoiceMessage(outcomes.checkCancelled), new RegExp(CHECK_FILE_NAME));
+    assert.match(folderChoiceMessage(outcomes.checkRenamed), /another extension/);
+    assert.match(folderChoiceMessage(outcomes.noPath), new RegExp(CHOOSE_FILE_NAME));
+    assert.match(folderChoiceMessage(outcomes.folderError), /in that folder \(FILE_ACCESS_DENIED\)/);
+    assert.match(folderChoiceMessage(outcomes.downloadsError), /in your Downloads folder \(FILE_NO_SPACE\)/);
+    assert.match(folderChoiceMessage(outcomes.blocked), /blocked DownHere’s small file \(FILE_BLOCKED\)/);
+    assert.match(folderChoiceMessage(outcomes.other), /Something broke/);
+  });
+
+  it('warns about files that were left in place', () => {
+    const one = folderChoiceMessage({ outcome: 'chosen', folder: 'Work', keptFiles: ['/home/me/Downloads/Work/Report.pdf'] });
+    assert.match(one, /^DownHere didn’t delete “Report\.pdf”, because its small file was saved under that name\./);
+    const two = folderChoiceMessage({ outcome: 'check-renamed', keptFiles: ['/a/One.pdf', 'C:\\b\\Two.txt'] });
+    assert.match(two, /another extension/);
+    assert.match(two, /DownHere didn’t delete “One\.pdf” and “Two\.txt”, because its small files were saved/);
+    assert.match(folderChoiceMessage({ keptFiles: ['/a/One.pdf'] }), /^DownHere didn’t delete “One\.pdf”/);
   });
 });
 
@@ -165,13 +185,16 @@ describe('helper downloads', () => {
 
 // Behaves like the downloads API of Chrome or Firefox where DownHere relies on
 // it. Save dialogs are answered from `answers`: {saveIn: folder}, {saveAs:
-// path}, {cancel: true}, {fail: 'ERROR'} or {noPath: true}.
+// path}, {cancel: true}, {open: true} (it stays open), {fail: 'ERROR'} or
+// {noPath: true}. `renameSaved` stands for another Chrome extension that
+// renames (or moves) files saved without a dialog.
 class FakeBrowser {
-  constructor({ firefox = false, askWhereToSave = false, downloadsDir = '/home/me/Downloads', sep = '/' } = {}) {
+  constructor({ firefox = false, askWhereToSave = false, downloadsDir = '/home/me/Downloads', sep = '/', renameSaved } = {}) {
     this.firefox = firefox;
     this.askWhereToSave = askWhereToSave;
     this.downloadsDir = downloadsDir;
     this.sep = sep;
+    this.renameSaved = renameSaved;
     this.answers = [];
     this.dialogs = [];
     this.downloadCalls = [];
@@ -180,6 +203,7 @@ class FakeBrowser {
     this.nextId = 1;
     this.session = {};
     this.lockHeld = false;
+    this.failSearches = 0;
     const event = () => {
       const listeners = new Set();
       return {
@@ -231,23 +255,24 @@ class FakeBrowser {
     return item.id;
   }
 
-  uniqueName(folder, name) {
+  // The path a browser picks for a new file, adding a number if it's taken.
+  uniquePath(folder, name) {
     const dot = name.lastIndexOf('.');
     for (let n = 0; ; n += 1) {
-      const candidate = n === 0 ? name : `${name.slice(0, dot)} (${n})${name.slice(dot)}`;
+      const number = this.firefox ? `(${n})` : ` (${n})`;
+      const candidate = n === 0 ? name : `${name.slice(0, dot)}${number}${name.slice(dot)}`;
       const path = `${folder}${this.sep}${candidate}`;
       if (!this.files.has(path)) return path;
     }
   }
 
-  // What a save dialog returns: a path, 'cancel', 'open' (it stays open) or {fail}.
+  // What a save dialog returns: a path, 'cancel', 'open' or {fail} / {noPath}.
   answerDialog(name) {
     this.dialogs.push(name);
     const answer = this.answers.shift() ?? { cancel: true };
     if (answer.cancel) return 'cancel';
     if (answer.open) return 'open';
-    if (answer.fail) return answer;
-    if (answer.noPath) return { noPath: true };
+    if (answer.fail || answer.noPath) return answer;
     return answer.saveAs ?? `${answer.saveIn}${this.sep}${name}`;
   }
 
@@ -259,9 +284,15 @@ class FakeBrowser {
     } else if (outcome.fail) {
       Object.assign(item, { state: 'interrupted', error: outcome.fail });
     } else {
-      const path = outcome.noPath ? `${this.downloadsDir}${this.sep}hidden-${id}.txt` : outcome;
+      const path = outcome.noPath ? `${this.downloadsDir}${this.sep}Ünïcode-${id}.txt` : outcome;
       this.files.set(path, HELPER_BYTES);
-      Object.assign(item, { state: 'complete', filename: outcome.noPath ? '' : path, realPath: path, exists: true, fileSize: HELPER_BYTES });
+      Object.assign(item, {
+        state: 'complete',
+        filename: outcome.noPath ? '' : path,
+        realPath: path,
+        exists: true,
+        fileSize: HELPER_BYTES,
+      });
     }
     this.onChanged.emit({ id, state: { previous: 'in_progress', current: item.state } });
   }
@@ -269,7 +300,10 @@ class FakeBrowser {
   async download({ url, filename, saveAs, conflictAction }) {
     this.downloadCalls.push({ url, filename, saveAs, conflictAction, helper: structuredClone(this.session[HELPER_KEY]) });
     const needsDialog = saveAs || (!this.firefox && this.askWhereToSave);
-    const silentPath = () => this.uniqueName(this.downloadsDir, filename);
+    const silentPath = () => {
+      const name = this.renameSaved?.(filename, url) ?? filename;
+      return this.uniquePath(this.downloadsDir, name);
+    };
     if (this.firefox) {
       // Firefox shows the dialog before the download exists.
       const outcome = needsDialog ? this.answerDialog(filename) : silentPath();
@@ -285,23 +319,29 @@ class FakeBrowser {
         const outcome = this.answerDialog(filename);
         if (outcome !== 'open') this.finish(id, outcome);
       }, 0);
+    } else {
+      // A file saved without a dialog can be complete before download() returns.
+      this.finish(id, silentPath());
     }
-    // A file saved without a dialog can be complete before download() returns.
-    else this.finish(id, silentPath());
     return id;
   }
 
   search({ id, urlRegex }) {
+    if (this.failSearches > 0) {
+      this.failSearches -= 1;
+      throw new Error('The downloads list is not available');
+    }
     const items = [...this.items.values()].filter(
       (item) => (id === undefined || item.id === id) && (urlRegex === undefined || new RegExp(urlRegex).test(item.url)),
     );
-    return items.map((item) => ({ ...item }));
+    return items.map(({ realPath, ...item }) => ({ ...item }));
   }
 
   removeFile(id) {
     const item = this.items.get(id);
-    if (item?.state !== 'complete' || !this.files.has(item.realPath ?? item.filename)) throw new Error('No file');
-    this.files.delete(item.realPath ?? item.filename);
+    const path = item?.realPath ?? item?.filename;
+    if (item?.state !== 'complete' || !this.files.has(path)) throw new Error('No file');
+    this.files.delete(path);
     item.exists = false;
   }
 
@@ -316,9 +356,9 @@ class FakeBrowser {
   }
 }
 
-function assertCleanedUp(browser) {
+function assertCleanedUp(browser, { files = [] } = {}) {
   assert.deepEqual([...browser.items.values()], [], 'downloads list');
-  assert.deepEqual([...browser.files.keys()], [], 'files');
+  assert.deepEqual([...browser.files.keys()], files, 'files');
   assert.equal(HELPER_KEY in browser.session, false, 'storage.session');
   assert.equal(browser.onChanged.listeners.size, 0, 'onChanged listeners');
   assert.equal(browser.onErased.listeners.size, 0, 'onErased listeners');
@@ -389,16 +429,23 @@ describe('chooseFolder', () => {
       browser.files.set(taken, 10);
       browser.answers.push({ saveIn: '/home/me/Downloads/Work' });
       assert.deepEqual(await chooseFolder(browser.api), { outcome: 'chosen', folder: 'Work' });
-      // Only DownHere's own files are deleted.
-      assert.deepEqual([...browser.files.keys()], [taken]);
-      browser.files.clear();
-      assertCleanedUp(browser);
+      // The numbered second file was deleted, the other one wasn't.
+      assertCleanedUp(browser, { files: [taken] });
+    });
+
+    it(`${name}: leaves a file saved under another name, which may have replaced one of yours`, async () => {
+      const browser = new FakeBrowser({ firefox });
+      const replaced = '/home/me/Downloads/Work/Quarterly report.pdf';
+      browser.files.set(replaced, 50_000);
+      browser.answers.push({ saveAs: replaced });
+      assert.deepEqual(await chooseFolder(browser.api), { outcome: 'chosen', folder: 'Work', keptFiles: [replaced] });
+      assertCleanedUp(browser, { files: [replaced] });
     });
 
     it(`${name}: reports a file that couldn’t be saved`, async () => {
       const browser = new FakeBrowser({ firefox });
       browser.answers.push({ fail: 'FILE_ACCESS_DENIED' });
-      assert.deepEqual(await chooseFolder(browser.api), { outcome: 'failed', error: 'FILE_ACCESS_DENIED' });
+      assert.deepEqual(await chooseFolder(browser.api), { outcome: 'failed', error: 'FILE_ACCESS_DENIED', step: 'choose' });
       assertCleanedUp(browser);
     });
   }
@@ -414,15 +461,47 @@ describe('chooseFolder', () => {
   it('Chrome: explains a closed second dialog', async () => {
     const browser = new FakeBrowser({ askWhereToSave: true });
     browser.answers.push({ saveIn: '/home/me/Downloads/Work' }, { cancel: true });
-    assert.deepEqual(await chooseFolder(browser.api), { outcome: 'check-failed' });
+    assert.deepEqual(await chooseFolder(browser.api), { outcome: 'check-cancelled' });
     assertCleanedUp(browser);
   });
 
-  it('Chrome: reports a path that the browser couldn’t tell', async () => {
-    const browser = new FakeBrowser();
-    browser.answers.push({ noPath: true });
-    assert.deepEqual(await chooseFolder(browser.api), { outcome: 'no-path' });
+  it('Chrome: reports why the second file couldn’t be saved', async () => {
+    const browser = new FakeBrowser({ askWhereToSave: true });
+    browser.answers.push({ saveIn: '/home/me/Downloads/Work' }, { fail: 'FILE_NO_SPACE' });
+    assert.deepEqual(await chooseFolder(browser.api), { outcome: 'failed', error: 'FILE_NO_SPACE', step: 'check' });
     assertCleanedUp(browser);
+  });
+
+  it('Chrome: doesn’t trust a second file saved under another name', async () => {
+    // For example in a folder chosen in the second dialog, under a new name.
+    const browser = new FakeBrowser({ askWhereToSave: true });
+    const renamed = '/home/me/Downloads/Work/check.txt';
+    browser.answers.push({ saveIn: '/home/me/Downloads/Work' }, { saveAs: renamed });
+    assert.deepEqual(await chooseFolder(browser.api), { outcome: 'check-renamed', keptFiles: [renamed] });
+    assertCleanedUp(browser, { files: [renamed] });
+  });
+
+  it('Chrome: doesn’t trust a second file that another extension renamed or moved', async () => {
+    // Chrome names the file after its blob: address when DownHere's name is dropped.
+    for (const renameSaved of [(name, url) => `${url.split('/').pop()}.txt`, (name, url) => `Text files/${url.split('/').pop()}.txt`]) {
+      const browser = new FakeBrowser({ renameSaved });
+      browser.answers.push({ saveIn: '/home/me/Downloads/Work' });
+      assert.deepEqual(await chooseFolder(browser.api), { outcome: 'check-renamed' });
+      // Both are still DownHere's own files, so both are deleted.
+      assertCleanedUp(browser);
+    }
+  });
+
+  it('Chrome: reports a path that the browser couldn’t tell, and leaves that file', async () => {
+    for (const answers of [[{ noPath: true }], [{ saveIn: '/home/me/Downloads/Work' }, { noPath: true }]]) {
+      const browser = new FakeBrowser({ askWhereToSave: answers.length === 2 });
+      browser.answers.push(...answers);
+      assert.deepEqual(await chooseFolder(browser.api), { outcome: 'no-path' });
+      // Without a name, DownHere can't tell whether the file is its own.
+      assert.equal(browser.files.size, 1);
+      browser.files.clear();
+      assertCleanedUp(browser);
+    }
   });
 
   it('works with Windows paths', async () => {
@@ -444,7 +523,20 @@ describe('chooseFolder', () => {
     browser.api.downloads.download = async () => {
       throw new Error('Invalid filename');
     };
-    assert.deepEqual(await chooseFolder(browser.api), { outcome: 'failed', error: 'Invalid filename' });
+    assert.deepEqual(await chooseFolder(browser.api), { outcome: 'failed', error: 'Invalid filename', step: 'choose' });
+    assertCleanedUp(browser);
+  });
+
+  it('stops waiting when the downloads list can’t be read, and cancels the download', async () => {
+    const browser = new FakeBrowser();
+    browser.answers.push({ open: true });
+    const download = browser.api.downloads.download;
+    browser.api.downloads.download = async (options) => {
+      const id = await download(options);
+      browser.failSearches = 1;
+      return id;
+    };
+    assert.deepEqual(await chooseFolder(browser.api), { outcome: 'failed', error: 'The downloads list is not available' });
     assertCleanedUp(browser);
   });
 
@@ -465,12 +557,14 @@ describe('chooseFolder', () => {
     const browser = new FakeBrowser();
     const blob = (n) => `blob:blob-origin://test/${n}`;
     const downloads = '/home/me/Downloads';
-    // Left behind: a saved helper file and a closed dialog.
+    // Left behind: saved helper files, also with numbers or named after their
+    // address, and a closed dialog.
     browser.add({ url: blob(1), filename: `${downloads}/Work/${CHOOSE_FILE_NAME}`, fileSize: HELPER_BYTES });
     browser.add({ url: blob(2), filename: `${downloads}/DownHere - choose this folder (2).txt`, fileSize: HELPER_BYTES });
     browser.add({ url: blob(3), filename: `${downloads}/DownHere - Downloads folder check(1).txt`, fileSize: HELPER_BYTES });
+    browser.add({ url: blob('5a1d'), filename: `${downloads}/5a1d.txt`, fileSize: HELPER_BYTES });
     browser.add({ url: blob(4), filename: '', state: 'interrupted', error: 'USER_CANCELED', exists: false, fileSize: -1 });
-    // Not DownHere's helper files, or still in use.
+    // Not exactly DownHere's helper files, or still in use.
     const kept = [
       browser.add({ url: blob(5), filename: `${downloads}/Renamed in the dialog.txt`, fileSize: HELPER_BYTES }),
       browser.add({ url: blob(6), filename: `${downloads}/Work/${CHOOSE_FILE_NAME}.bak`, fileSize: HELPER_BYTES }),
@@ -478,7 +572,8 @@ describe('chooseFolder', () => {
       browser.add({ url: blob(8), filename: `${downloads}/Other/${CHOOSE_FILE_NAME}`, fileSize: HELPER_BYTES + 1 }),
       browser.add({ url: blob(9), filename: `${downloads}/${CHECK_FILE_NAME}`, fileSize: HELPER_BYTES, byExtensionId: 'other' }),
       browser.add({ url: 'https://example.com/a', filename: `${downloads}/${CHECK_FILE_NAME}`, fileSize: HELPER_BYTES }),
-      browser.add({ url: blob(10), filename: '', state: 'in_progress', exists: false, fileSize: -1 }),
+      browser.add({ url: blob(10), filename: `${downloads}/11.txt`, fileSize: HELPER_BYTES }),
+      browser.add({ url: blob(12), filename: '', state: 'in_progress', exists: false, fileSize: -1 }),
     ];
     browser.answers.push({ cancel: true });
     assert.deepEqual(await chooseFolder(browser.api), { outcome: 'cancelled' });
@@ -491,6 +586,7 @@ describe('chooseFolder', () => {
         `${downloads}/${CHOOSE_FILE_NAME}x`,
         `${downloads}/Other/${CHOOSE_FILE_NAME}`,
         `${downloads}/${CHECK_FILE_NAME}`,
+        `${downloads}/11.txt`,
       ],
     );
   });

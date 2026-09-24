@@ -147,6 +147,15 @@ describe('planRedownload', () => {
     assert.equal(reason({ url: 'blob:https://example.com/0b7f1e52-4d0c-4a39-9f5e-2c1b8d3a6e10' }), 'not-repeatable');
     assert.equal(reason({ cookieStoreId: 'firefox-container-1' }), 'container');
     assert.equal(reason({ filename: '/home/me/Downloads/50% off.pdf' }), 'unsafe-filename');
+    assert.equal(reason({ filename: '/home/me/Downloads/no\u00a0break.pdf' }), 'unsafe-filename');
+  });
+
+  it('skips rules whose folder Firefox would rename, which rules from before 0.3.0 can have', () => {
+    for (const folder of ['100% Done', 'Work/no\u00a0break', 'thin\u2009space/Sub']) {
+      const plan = planRedownload(download(), [rule('example.com', folder)], DEFAULT_SETTINGS);
+      assert.equal(plan.reason, 'unsafe-folder', folder);
+      assert.equal(plan.rule.folder, folder);
+    }
   });
 
   it('sorts data: downloads and downloads from private windows', () => {

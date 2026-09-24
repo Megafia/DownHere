@@ -220,6 +220,31 @@ try {
     JSON.parse(await options(`chrome.downloads.search({ urlRegex: '^blob:chrome-extension:' }).then(JSON.stringify)`));
   const noHelpersLeft = async (name) =>
     check(name, helperFiles().length === 0 && (await helperEntries()).length === 0, `Left: ${helperFiles().join(', ')}`);
+  // Records the small files that any DownHere page asks Chrome to save. Each
+  // Browse… must ask for exactly one, with a save dialog, which Chrome closes
+  // without a window (USER_CANCELED); DownHere then removes it from the list.
+  await options(`(() => {
+    window.helperDownloads = [];
+    const find = (id) => window.helperDownloads.find((entry) => entry.id === id);
+    chrome.downloads.onCreated.addListener((item) => {
+      if (item.url.startsWith('blob:' + location.origin + '/')) window.helperDownloads.push({ id: item.id });
+    });
+    chrome.downloads.onChanged.addListener((delta) => {
+      if (delta.error && find(delta.id)) find(delta.id).error = delta.error.current;
+    });
+    chrome.downloads.onErased.addListener((id) => {
+      if (find(id)) find(id).erased = true;
+    });
+  })()`);
+  const askedForDialog = async (name) => {
+    let asked = [];
+    await waitFor(async () => {
+      asked = await options('window.helperDownloads');
+      return asked.length > 0 && asked.every((entry) => entry.erased);
+    }, 5000);
+    await options('window.helperDownloads.splice(0)');
+    check(name, asked.length === 1 && asked[0].error === 'USER_CANCELED' && asked[0].erased, JSON.stringify(asked));
+  };
 
   // While a rule is on, Chrome lets DownHere name every download, including
   // the small files it saves to find out which folder was chosen.
@@ -241,6 +266,7 @@ try {
   check('DownHere’s small files keep their names while a rule is on', named === join(downloadsDir, 'DownHere - Downloads folder check.txt'), named);
 
   await options(`(() => {
+    window.helperDownloads.splice(0);
     const field = document.getElementById('add-folder');
     field.value = 'Typed';
     field.dispatchEvent(new Event('input'));
@@ -261,6 +287,7 @@ try {
     closed.value === 'Typed' && closed.hint === 'Saves to Downloads/Typed' && !closed.error,
     JSON.stringify(closed),
   );
+  await askedForDialog('Browse…: Chrome is asked to open a save dialog');
   await noHelpersLeft('Browse…: nothing is left after the dialog closed');
 
   // The popup's Browse… button opens the settings page with its form in the address.
@@ -288,6 +315,7 @@ try {
     handedOver.domain === 'news.example.org' && handedOver.folder === 'Old' && !handedOver.subdomains && handedOver.address === '',
     JSON.stringify(handedOver),
   );
+  await askedForDialog('The settings page asks Chrome to open the save dialog for the popup’s form');
   await noHelpersLeft('Nothing is left after Browse… from the popup');
 
   // The popup's own Browse… button. The popup only learns the address of the
@@ -346,6 +374,7 @@ try {
     popupShowsSite && edited.domain === 'localhost' && edited.folder === 'From the popup',
     JSON.stringify({ popupShowsSite, ...edited }),
   );
+  await askedForDialog('The popup’s Browse… makes Chrome open a save dialog for the rule');
   await noHelpersLeft('Nothing is left after the popup’s Browse…');
 } catch (error) {
   check('The test ran to the end', false, error.stack);

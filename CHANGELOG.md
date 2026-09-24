@@ -10,7 +10,11 @@ All notable changes to DownHere are listed here. Version numbers follow [Semanti
   is, so DownHere saves a small file there and a second one directly in the Downloads folder, works out the folder from
   the two, and deletes both files right away.
 - A folder outside the Downloads folder, the Downloads folder itself and folder names that rules can’t use are
-  explained instead of being filled in.
+  explained instead of being filled in. DownHere only deletes files that are exactly its small files, so a file saved
+  under another name in the dialog is left in place, with a warning.
+- Folder names for new rules can’t contain `%` or special space characters any more, because Firefox changes them. In
+  Firefox, files for existing rules with such a folder now stay in the Downloads folder instead of being saved in a
+  differently named folder.
 - `npm run test:chrome` tries DownHere in a real Chrome, as `npm run test:firefox` does in Firefox, and both now try
   Browse… too. `npm test` only runs the unit tests again and no longer starts Firefox.
 

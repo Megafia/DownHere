@@ -77,8 +77,8 @@ go, and back up your rules.
 ### Choosing a folder with Browse…
 
 **Browse…** opens your browser’s save dialog, suggesting a file named `DownHere - choose this folder.txt`. Open the
-folder you want, or create a new one, and click **Save**. DownHere fills in the folder, which you can still change
-before you save the rule.
+folder you want, or create a new one, and click **Save**, keeping that name. DownHere fills in the folder, which you
+can still change before you save the rule.
 
 Browsers don’t tell extensions where a folder chosen in a folder dialog is, but they do tell them where a download was
 saved. So DownHere really saves that small file, and then a second one, `DownHere - Downloads folder check.txt`,
@@ -93,8 +93,13 @@ may only see them there for a moment.
 - If Chrome is set to ask where to save each file, it also asks about the second file. Click **Save** without changing
   the folder.
 - Chrome opens the dialog in your Downloads folder, Firefox in the folder you chose last time.
+- DownHere only deletes files that are exactly its small files. If you save the small file under another name, for
+  example by clicking a file in the dialog, DownHere leaves it where it is and tells you, in case it replaced a file of
+  yours.
+- In Chrome, another extension that renames or sorts downloads can get in the way. DownHere then says that it can’t
+  tell where your Downloads folder is, and you can type the folder name instead.
 - If a DownHere page is closed while its save dialog is open, the small file can stay where you saved it. DownHere
-  deletes it the next time you use **Browse…**, or you can delete it yourself.
+  usually deletes it the next time you use **Browse…**; otherwise you can delete it yourself.
 
 ## How rules are matched
 
@@ -134,6 +139,8 @@ may only see them there for a moment.
 - Browsers only let extensions save files inside your Downloads folder, the location set in Chrome’s
   **Settings › Downloads** or in Firefox’s **Settings › General › Files and Applications**. Your rule folders are
   created inside it. To use a different base folder, change that location in the browser.
+- Folder names can’t contain `%` or special space characters (such as a no-break space), because Firefox would change
+  them. Rules made with an earlier version keep such folders; in Firefox, their files stay in the Downloads folder.
 - Files opened from your own computer (`file://` addresses) are never moved.
 
 ### In Chrome

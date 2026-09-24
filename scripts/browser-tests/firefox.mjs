@@ -339,7 +339,7 @@ try {
 
   await answer({ saveIn: downloadsDir });
   result = await browse(optionsTab);
-  check('Browse…: the Downloads folder itself is explained', result.error && result.hint.startsWith('That’s your Downloads folder itself'), JSON.stringify(result));
+  check('Browse…: the Downloads folder itself is explained', result.error && result.hint.startsWith('The small file was saved directly in your Downloads folder'), JSON.stringify(result));
   await noHelpersLeft('Browse…: nothing is left after choosing the Downloads folder');
 
   // Firefox asks for every download in this mode, but not for DownHere's second file.
@@ -385,12 +385,43 @@ try {
     return handedOver.folder === 'Picked/Sub';
   });
   check(
-    'The popup’s Browse… opens the dialog on the settings page with the popup’s form',
+    'The settings page takes over the popup’s form and opens the dialog',
     handedOver.domain === 'news.example.org' && handedOver.folder === 'Picked/Sub' && !handedOver.subdomains && handedOver.address === '',
     JSON.stringify(handedOver),
   );
   await sleep(500);
   await noHelpersLeft('Nothing is left after choosing from the popup');
+
+  // From a popup that showed a website with a rule, the rule's editor opens.
+  mkdirSync(join(downloadsDir, 'From the popup'));
+  await answer({ saveIn: join(downloadsDir, 'From the popup') });
+  const { context: ruleTab } = await send('browsingContext.create', { type: 'tab' });
+  await send('browsingContext.navigate', {
+    context: ruleTab,
+    url: `${OPTIONS_URL}#browse=1&domain=localhost&folder=Old&subdomains=1&rule=test`,
+    wait: 'complete',
+  });
+  let editedFromPopup = {};
+  await waitFor(async () => {
+    editedFromPopup = JSON.parse(
+      await evaluate(
+        ruleTab,
+        `JSON.stringify({
+          domain: document.getElementById('edit-domain-test')?.value,
+          folder: document.getElementById('edit-folder-test')?.value,
+          choosing: document.querySelector('[data-action="browse"]')?.disabled,
+        })`,
+      ),
+    );
+    return editedFromPopup.folder === 'From the popup' && editedFromPopup.choosing === false;
+  });
+  check(
+    'For a website with a rule, the settings page opens the rule’s editor and fills in the chosen folder',
+    editedFromPopup.domain === 'localhost' && editedFromPopup.folder === 'From the popup',
+    JSON.stringify(editedFromPopup),
+  );
+  await sleep(500);
+  await noHelpersLeft('Nothing is left after choosing for the rule from the popup');
 
 } catch (error) {
   check('The test ran to the end', false, error.stack);

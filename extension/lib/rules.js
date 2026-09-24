@@ -178,6 +178,9 @@ const FORMAT_CHAR = /\p{Cf}/u;
 const WHITESPACE_CHAR = /\p{White_Space}/u;
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 const SHORT_NAME_BREAKERS = /[\p{White_Space}"/:+|<>=;?,*]/u;
+// Firefox's downloads API turns these space characters into ordinary spaces,
+// and drops the line and paragraph separators.
+const FIREFOX_SPACES = /[\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f]/u;
 const SHELL_EXTENSIONS = new Set(['local', 'lnk', 'scf', 'url']);
 const RESERVED_DEVICE_NAMES = new Set([
   'con', 'prn', 'aux', 'nul', 'clock$',
@@ -254,9 +257,25 @@ export function checkPathComponent(name, { windowsShortNames = true } = {}) {
   return '';
 }
 
-/** Checks one folder name typed by the user. Returns "" when it is fine. */
-export function checkFolderName(name) {
-  const problem = checkPathComponent(name, { windowsShortNames: true });
+/**
+ * Explains what Firefox's downloads API would change in a name, or returns ""
+ * when it keeps the name as it is. Firefox changes "%" to "_", so a file would
+ * be saved in a differently named folder, and rejects some space characters.
+ */
+export function checkFirefoxName(name) {
+  if (name.includes('%')) return 'Folder names can’t contain %, because Firefox changes it to _.';
+  const space = FIREFOX_SPACES.exec(name)?.[0];
+  if (space) return `This name contains a special space or line break (${describeCodePoint(space)}). Use an ordinary space.`;
+  return '';
+}
+
+/**
+ * Checks one folder name typed by the user. Returns "" when it is fine.
+ * `portable: false` allows names that only Firefox can't use, which rules
+ * made before version 0.3.0 may have.
+ */
+export function checkFolderName(name, { portable = true } = {}) {
+  const problem = checkPathComponent(name, { windowsShortNames: true }) || (portable ? checkFirefoxName(name) : '');
   if (problem) return problem;
   if (new TextEncoder().encode(name).length > MAX_FOLDER_NAME_BYTES) {
     return `The folder name “${Array.from(name).slice(0, 20).join('')}…” is too long.`;
@@ -267,11 +286,11 @@ export function checkFolderName(name) {
 /**
  * Normalizes a folder typed by the user into a relative path such as
  * "Work/Invoices". Backslashes are accepted as separators, and spaces around
- * each folder name are removed.
+ * each folder name are removed. `portable` is passed on to checkFolderName().
  *
  * @returns {{ok: true, folder: string} | {ok: false, error: string}}
  */
-export function normalizeFolder(input) {
+export function normalizeFolder(input, { portable = true } = {}) {
   const text = typeof input === 'string' ? input.trim() : '';
   const emptyError = 'Enter a folder name, like Work or Work/Invoices.';
   if (text === '') return { ok: false, error: emptyError };
@@ -288,7 +307,7 @@ export function normalizeFolder(input) {
     .filter((part) => part !== '' && part !== '.');
   if (parts.length === 0) return { ok: false, error: emptyError };
   for (const part of parts) {
-    const problem = checkFolderName(part);
+    const problem = checkFolderName(part, { portable });
     if (problem) return { ok: false, error: problem };
   }
   return { ok: true, folder: parts.join('/') };
@@ -372,7 +391,8 @@ export function sanitizeRules(raw) {
   for (const entry of raw) {
     if (!entry || typeof entry !== 'object') continue;
     const domain = normalizeDomain(entry.domain);
-    const folder = normalizeFolder(entry.folder);
+    // Keep rules whose folder only Firefox can't use (see checkFolderName()).
+    const folder = normalizeFolder(entry.folder, { portable: false });
     if (!domain.ok || !folder.ok || seenDomains.has(domain.domain)) continue;
     seenDomains.add(domain.domain);
     const hasUsableId = typeof entry.id === 'string' && entry.id !== '' && !seenIds.has(entry.id);

@@ -30,15 +30,25 @@ export const HELPER_KEY = 'helperFile';
 // Only one folder can be chosen at a time, across all DownHere pages.
 const LOCK_NAME = 'downhere-folder-picker';
 
-// A helper file name, possibly with the number a browser adds when the name
-// is taken: "name (1).txt" in Chrome, "name(1).txt" in Firefox.
-const HELPER_FILE_PATTERN = new RegExp(
-  `^(?:${[CHOOSE_FILE_NAME, CHECK_FILE_NAME].map((name) => escapeRegExp(name.slice(0, -4))).join('|')})` +
-    ' ?(?:\\(\\d+\\))?\\.txt$',
-);
+// Download errors that come from a policy or a virus scanner rather than
+// from the folder.
+const BLOCKED_ERRORS = new Set(['FILE_BLOCKED', 'FILE_SECURITY_CHECK_FAILED', 'FILE_VIRUS_INFECTED']);
 
 function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Matches a file name, also with the number a browser adds when the name is
+// taken: "name (1).txt" in Chrome, "name(1).txt" in Firefox.
+function namePattern(names) {
+  const bases = names.map((name) => escapeRegExp(name.slice(0, name.lastIndexOf('.'))));
+  return new RegExp(`^(?:${bases.join('|')}) ?(?:\\(\\d+\\))?\\.txt$`);
+}
+
+const CHECK_FILE_PATTERN = namePattern([CHECK_FILE_NAME]);
+
+function fileName(path) {
+  return String(path ?? '').split(/[\\/]/).pop();
 }
 
 function messageOf(error) {
@@ -52,6 +62,19 @@ function messageOf(error) {
  */
 export function isHelperDownload(item, { extensionId, extensionUrl }) {
   return item.byExtensionId === extensionId && typeof item.url === 'string' && item.url.startsWith(`blob:${extensionUrl}`);
+}
+
+/**
+ * True if a finished download's file is exactly a helper file, so deleting it
+ * can't lose anything. A file saved under another name in the dialog may have
+ * replaced one of the person's own files, so it is never deleted. When another
+ * extension drops the names DownHere gives its downloads, Chrome names the
+ * file after the end of its blob: address instead.
+ */
+function isHelperFile(item) {
+  if (item.state !== 'complete' || item.fileSize !== HELPER_FILE_BYTES) return false;
+  const blobName = String(item.url).split('/').pop();
+  return namePattern([CHOOSE_FILE_NAME, CHECK_FILE_NAME, `${blobName}.txt`]).test(fileName(item.filename));
 }
 
 /** The name for the helper file saved from `url`, or "" if there is none. */
@@ -120,17 +143,35 @@ function parentFolder(path, windows) {
 }
 
 /**
- * What to tell the person after choosing a folder didn't work out. Returns ""
- * for a chosen folder or a closed dialog.
+ * What to tell the person after choosing a folder. Returns "" for a chosen
+ * folder or a closed dialog, unless files had to be left in place.
  */
 export function folderChoiceMessage(result) {
+  const parts = [outcomeMessage(result)];
+  const kept = (result.keptFiles ?? []).map((path) => `“${fileName(path)}”`);
+  if (kept.length === 1) {
+    parts.push(
+      `DownHere didn’t delete ${kept[0]}, because its small file was saved under that name. If that replaced a ` +
+        'file of yours, the file now only contains DownHere’s note.',
+    );
+  } else if (kept.length > 1) {
+    parts.push(
+      `DownHere didn’t delete ${kept.join(' and ')}, because its small files were saved under those names. If they ` +
+        'replaced files of yours, those now only contain DownHere’s note.',
+    );
+  }
+  return parts.filter(Boolean).join(' ');
+}
+
+function outcomeMessage(result) {
   switch (result.outcome) {
     case 'busy':
       return 'A save dialog for choosing a folder is already open in another DownHere tab.';
     case 'downloads-folder':
       return (
-        'That’s your Downloads folder itself. Choose a folder inside it (the dialog can also create one), ' +
-        'or type a folder name.'
+        'The small file was saved directly in your Downloads folder. Choose a folder inside it (the dialog can also ' +
+        'create one), or type a folder name. If no save dialog opened, your browser saves files without asking, ' +
+        'so type the folder name.'
       );
     case 'outside':
       return (
@@ -139,20 +180,32 @@ export function folderChoiceMessage(result) {
       );
     case 'invalid':
       return `DownHere can’t use that folder. ${result.error}`;
-    case 'check-failed':
+    case 'check-cancelled':
       return (
         'DownHere couldn’t find your Downloads folder, because its second small file wasn’t saved. ' +
-        `Try again, and if you’re asked where to save “${CHECK_FILE_NAME}”, just click Save.`
+        `Try again, and when you’re asked where to save “${CHECK_FILE_NAME}”, just click Save.`
+      );
+    case 'check-renamed':
+      return (
+        `DownHere’s second small file wasn’t saved as “${CHECK_FILE_NAME}”, so DownHere can’t tell where your ` +
+        'Downloads folder is. This happens when another extension renames or sorts downloads, or when the name is ' +
+        'changed in the save dialog. Type the folder name instead, or try again.'
       );
     case 'no-path':
       return (
-        'Your browser didn’t tell DownHere where it saved the file. On Linux, this happens with folder names ' +
-        'that have letters like é or ü when the system doesn’t use UTF-8.'
+        `Your browser didn’t tell DownHere where it saved the small file, so DownHere left “${CHOOSE_FILE_NAME}” ` +
+        'in the folder you chose; you can delete it. On Linux, this happens with folder names that have letters ' +
+        'like é or ü when the system doesn’t use UTF-8.'
       );
     case 'failed':
-      return /^FILE_/.test(result.error)
-        ? `The browser couldn’t save a file in that folder (${result.error}).`
-        : `Choosing a folder didn’t work (${result.error}). You can type the folder name instead.`;
+      if (BLOCKED_ERRORS.has(result.error)) {
+        return `Your browser or security software blocked DownHere’s small file (${result.error}). You can type the folder name instead.`;
+      }
+      if (/^FILE_/.test(result.error)) {
+        const where = result.step === 'check' ? 'your Downloads folder' : 'that folder';
+        return `The browser couldn’t save a file in ${where} (${result.error}).`;
+      }
+      return `Choosing a folder didn’t work (${result.error}). You can type the folder name instead.`;
     default:
       return '';
   }
@@ -170,34 +223,44 @@ export function folderChoiceMessage(result) {
  * ('choosing') and when the second file is being saved ('checking').
  *
  * @returns {Promise<object>} One of the results of folderFromSavedFiles(), or
- *   {outcome: 'cancelled' | 'busy' | 'check-failed' | 'no-path'}, or
- *   {outcome: 'failed', error: string}.
+ *   {outcome: 'cancelled' | 'busy' | 'check-cancelled' | 'check-renamed' | 'no-path'},
+ *   or {outcome: 'failed', error: string, step: 'choose' | 'check'}. Any of
+ *   them can list `keptFiles`: saved files that weren't deleted.
  */
 export function chooseFolder(api, { onProgress = () => {} } = {}) {
   return api.locks.request(LOCK_NAME, { ifAvailable: true }, async (lock) => {
     if (!lock) return { outcome: 'busy' };
     await removeLeftovers(api);
     const helpers = new HelperFiles(api);
+    let result;
     try {
-      onProgress('choosing');
-      const chosen = await helpers.save(CHOOSE_FILE_NAME, { saveAs: true });
-      if (chosen.cancelled) return { outcome: 'cancelled' };
-      if (chosen.error) return { outcome: 'failed', error: chosen.error };
-      onProgress('checking');
-      const check = await helpers.save(CHECK_FILE_NAME, { saveAs: false });
-      // A browser set to ask where to save every file shows a dialog for this
-      // one too.
-      if (!check.item) return { outcome: 'check-failed' };
-      // Chrome on Linux reports no path when a name can't be converted to the
-      // system's character set.
-      if (!chosen.item.filename || !check.item.filename) return { outcome: 'no-path' };
-      return folderFromSavedFiles(chosen.item.filename, check.item.filename);
+      result = await chooseWith(helpers, onProgress);
     } catch (error) {
-      return { outcome: 'failed', error: messageOf(error) };
-    } finally {
-      await helpers.removeAll();
+      result = { outcome: 'failed', error: messageOf(error) };
     }
+    const keptFiles = await helpers.removeAll();
+    return keptFiles.length > 0 ? { ...result, keptFiles } : result;
   });
+}
+
+async function chooseWith(helpers, onProgress) {
+  onProgress('choosing');
+  const chosen = await helpers.save(CHOOSE_FILE_NAME, { saveAs: true });
+  if (chosen.cancelled) return { outcome: 'cancelled' };
+  if (chosen.error) return { outcome: 'failed', error: chosen.error, step: 'choose' };
+  onProgress('checking');
+  const check = await helpers.save(CHECK_FILE_NAME, { saveAs: false });
+  // A browser set to ask where to save every file shows a dialog for this one too.
+  if (check.cancelled) return { outcome: 'check-cancelled' };
+  if (check.error) return { outcome: 'failed', error: check.error, step: 'check' };
+  // Chrome on Linux reports no path when a name can't be converted to the
+  // system's character set.
+  if (!chosen.item.filename || !check.item.filename) return { outcome: 'no-path' };
+  // Only a file saved with DownHere's name is known to be in the Downloads
+  // folder. Otherwise another extension named it (and may have moved it), or
+  // it was renamed in the dialog that a browser set to ask for every file shows.
+  if (!CHECK_FILE_PATTERN.test(fileName(check.item.filename))) return { outcome: 'check-renamed' };
+  return folderFromSavedFiles(chosen.item.filename, check.item.filename);
 }
 
 // Saves helper files, waits for them and deletes them again.
@@ -273,7 +336,10 @@ class HelperFiles {
     });
   }
 
-  // Deletes the helper files and removes them from the downloads list.
+  /**
+   * Deletes the helper files and removes them from the downloads list.
+   * Returns the paths of saved files that were left in place.
+   */
   async removeAll() {
     this.api.downloads.onChanged.removeListener(this.onChanged);
     this.api.downloads.onErased.removeListener(this.onErased);
@@ -282,26 +348,40 @@ class HelperFiles {
     } catch {
       // Only needed while a file is being saved.
     }
-    for (const id of this.ids) await removeHelperDownload(this.api.downloads, id);
+    const kept = [];
+    for (const id of this.ids) {
+      const keptPath = await removeHelperDownload(this.api.downloads, id);
+      if (keptPath) kept.push(keptPath);
+    }
+    return kept;
   }
 }
 
+// Returns the path of a saved file that isn't exactly a helper file, which
+// stays where it is; only its entry in the downloads list is removed. A file
+// whose path the browser didn't report stays too ('no-path').
 async function removeHelperDownload(downloads, id) {
+  let keptPath = '';
   try {
     const [item] = await downloads.search({ id });
-    if (!item) return;
+    if (!item) return '';
     if (item.state === 'in_progress') await downloads.cancel(id);
-    else if (item.state === 'complete' && item.exists) await downloads.removeFile(id);
+    else if (item.state === 'complete' && item.exists) {
+      if (isHelperFile(item)) await downloads.removeFile(id);
+      else keptPath = item.filename;
+    }
     await downloads.erase({ id });
   } catch {
     // The file or the list entry may already be gone.
   }
+  return keptPath;
 }
 
 /**
  * Deletes helper files that were left behind, for example because a DownHere
  * page was closed while its save dialog was open. Runs before a folder is
- * chosen, and only deletes files that are exactly helper files.
+ * chosen. Files that aren't exactly helper files stay, and so do their
+ * entries in the downloads list.
  */
 async function removeLeftovers(api) {
   let items;
@@ -312,12 +392,10 @@ async function removeLeftovers(api) {
   }
   for (const item of items) {
     if (!isHelperDownload(item, api) || item.state === 'in_progress') continue;
-    const name = String(item.filename ?? '').split(/[\\/]/).pop();
-    const isHelperFile = item.state === 'complete' && item.fileSize === HELPER_FILE_BYTES && HELPER_FILE_PATTERN.test(name);
-    // A saved file with another name was renamed in the dialog, so leave it.
-    if (item.state === 'complete' && !isHelperFile) continue;
+    const helperFile = isHelperFile(item);
+    if (item.state === 'complete' && !helperFile) continue;
     try {
-      if (isHelperFile && item.exists) await api.downloads.removeFile(item.id);
+      if (helperFile && item.exists) await api.downloads.removeFile(item.id);
       await api.downloads.erase({ id: item.id });
     } catch {
       // Try again next time.

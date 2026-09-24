@@ -549,18 +549,20 @@ async function browseForFolder(target) {
   if (picking !== null) return;
   picking = target;
   setBrowseButtonsEnabled(false);
-  setFolderMessage(target, { text: 'In the save dialog, open the folder you want and click Save.' });
+  setFolderMessage(target, {
+    text: 'In the save dialog, open the folder you want and click Save. Keep the file name it suggests.',
+  });
   let slowCheck;
   let result;
   try {
     result = await chooseFolder(folderPickerApi(), {
       onProgress: (step) => {
-        if (step !== 'checking') return;
-        // Saving the second file only takes this long when the browser asks
-        // where to save it.
+        // Chrome set to ask where to save each file also asks about the
+        // second file. Saving it takes longer then, but also on a slow disk.
+        if (step !== 'checking' || BROWSER !== 'chrome') return;
         slowCheck = setTimeout(() => {
           setFolderMessage(target, {
-            text: `Your browser is asking where to save “${CHECK_FILE_NAME}”. Click Save without changing the folder.`,
+            text: `If your browser asks where to save “${CHECK_FILE_NAME}”, click Save without changing the folder.`,
           });
         }, 1000);
       },
@@ -586,10 +588,23 @@ function showFolderChoice(target, result) {
     updateFolderHint(folder, hint);
     if (message) showFolderMessage(hint, { text: message, isError: true });
     (chosen ? folder : $('add-browse')).focus();
+    if (chosen) showToast(`Chose ${displayFolder(result.folder)}. Click Add rule to save the rule.`);
     return;
   }
-  // The rule may have been deleted in another tab meanwhile.
-  if (editing?.id !== target) return;
+  if (editing?.id !== target) {
+    // Editing was closed, or the rule was deleted in another tab, meanwhile.
+    const deleted = !state.rules.some((rule) => rule.id === target);
+    const text = [
+      deleted && result.outcome !== 'cancelled' ? 'The rule was deleted in another tab.' : '',
+      folderChoiceMessage({ keptFiles: result.keptFiles }),
+    ]
+      .filter(Boolean)
+      .join(' ');
+    if (text) showToast(text);
+    // Its Browse… button is gone, and with it the keyboard focus.
+    if (deleted) $('rules-title').focus();
+    return;
+  }
   if (chosen) {
     editing.folder = result.folder;
     editing.errors.folder = undefined;
@@ -598,6 +613,7 @@ function showFolderChoice(target, result) {
   renderRules();
   const focusKey = chosen ? `edit-folder:${target}` : `edit-browse:${target}`;
   $('rule-list').querySelector(`[data-focus-key="${CSS.escape(focusKey)}"]`)?.focus();
+  if (chosen) showToast(`Chose ${displayFolder(result.folder)}. Click Save to keep it.`);
 }
 
 /** Reads the popup's form from this page's address and removes it from there. */
