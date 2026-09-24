@@ -142,8 +142,8 @@ may only see them there for a moment.
   created inside it. To use a different base folder, change that location in the browser.
 - Folder names can’t contain `%` or special space characters (such as a no-break space), or end in `.desktop`,
   because Firefox would change them. Rules made with an earlier version keep such a folder, also when you restore them
-  from a backup, and you can still change their other settings. Chrome saves their files there as before. In Firefox, their files stay in the Downloads
-  folder, and the popup and the settings page say so.
+  from a backup, and you can still change their other settings. Chrome saves their files there as before. In
+  Firefox, their files stay in the Downloads folder, and the popup and the settings page say so.
 - Files opened from your own computer (`file://` addresses) are never moved.
 
 ### In Chrome

@@ -13,9 +13,9 @@ All notable changes to DownHere are listed here. Version numbers follow [Semanti
   explained instead of being filled in. DownHere only deletes files that are exactly its small files, so a file saved
   under another name in the dialog is left in place, with a warning.
 - Folder names for new rules can’t contain `%` or special space characters or end in `.desktop` any more, because
-  Firefox changes them. Existing rules keep such a folder, also when restored from a backup, and can still be edited. In Firefox, their files now stay in
-  the Downloads folder, and the popup, the settings page and the download checker say why. Before, Firefox used a
-  folder with `_` instead of `%`, and couldn’t sort the files for the other names at all.
+  Firefox changes them. Existing rules keep such a folder, also when restored from a backup, and can still be edited.
+  In Firefox, their files now stay in the Downloads folder, and the popup, the settings page and the download checker
+  say why. Before, Firefox used a folder with `_` instead of `%`, and couldn’t sort files for the other names at all.
 - `npm run test:chrome` tries DownHere in a real Chrome, as `npm run test:firefox` does in Firefox, and both now try
   Browse… too. `npm test` only runs the unit tests again and no longer starts Firefox.
 
